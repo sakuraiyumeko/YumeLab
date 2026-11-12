@@ -11,10 +11,10 @@
   - [x] 创建 `AGENT_TASK.md`、`AGENT_PROGRESS.md`、`CHANGELOG.md`
   - [x] 建立 baseline commit
 
-- [ ] **Phase 1: 传输层分离 (Transport Layer)**
-  - [ ] 实现 `PICO/transport.py`（非阻塞 poll、行缓冲、防溢出）
-  - [ ] 实现 `PC/transport.py`（串口包装、单调时钟超时控制）
-  - [ ] 验证基本字符串收发与超时处理
+- [x] **Phase 1: 传输层分离 (Transport Layer)**
+  - [x] 实现 `PICO/transport.py`（非阻塞 poll、行缓冲、防溢出）
+  - [x] 实现 `PC/transport.py`（串口包装、单调时钟超时控制）
+  - [x] 验证基本字符串收发与超时处理
 
 - [ ] **Phase 2: 协议层重构 (Protocol Layer)**
   - [ ] 重构 `PICO/protocol.py`（移除 COMMANDS 白名单，保留格式解析）
