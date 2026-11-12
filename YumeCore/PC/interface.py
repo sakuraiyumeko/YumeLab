@@ -24,6 +24,34 @@ COMMANDS = {
         "usage": "help",
         "description": "Show available commands"
     },
+    "ping": {
+        "usage": "ping",
+        "description": "Test connection to Pico"
+    },
+    "info": {
+        "usage": "info",
+        "description": "Show Pico system information"
+    },
+    "devices": {
+        "usage": "devices",
+        "description": "List all registered devices on Pico"
+    },
+    "device": {
+        "usage": "device <info|read|write> <id> [prop] [val]",
+        "description": "Inspect or interact with a device"
+    },
+    "apps": {
+        "usage": "apps",
+        "description": "List all registered applications on Pico"
+    },
+    "app": {
+        "usage": "app <info|read|write> <name> [prop] [val]",
+        "description": "Inspect or configure an application"
+    },
+    "auto": {
+        "usage": "auto <on|off|set <threshold>>",
+        "description": "Convenience control for thermal auto mode"
+    },
     "ls": {
         "usage": "ls [path]",
         "description": "List directory contents"
@@ -76,7 +104,7 @@ COMMANDS = {
 
 
 # ============================================================
-# Pico Filesystem Interface
+# Pico Filesystem & Management Interface
 # ============================================================
 
 class PicoInterface:
@@ -108,7 +136,7 @@ class PicoInterface:
         )
 
     def request(self, command, *args):
-        return self.core._send(command, *args)
+        return self.core.send_request(command, *args)
 
     # --------------------------------------------------------
     # Filesystem operations
@@ -116,34 +144,23 @@ class PicoInterface:
 
     def list_dir(self, path="."):
         path = self.remote_path(path)
-
-        result = self.request(
-            "FS_LIST",
-            self.encode(path)
-        )
-
+        result = self.request("FS_LIST", self.encode(path))
         return json.loads(result)
 
     def read_file(self, path):
         path = self.remote_path(path)
-
-        info = json.loads(
-            self.request("FS_STAT", self.encode(path))
-        )
-
+        info = json.loads(self.request("FS_STAT", self.encode(path)))
         size = info["size"]
         data = bytearray()
 
         for offset in range(0, size, CHUNK_SIZE):
             chunk_size = min(CHUNK_SIZE, size - offset)
-
             result = self.request(
                 "FS_READ",
                 self.encode(path),
                 offset,
                 chunk_size
             )
-
             data.extend(self.decode(result))
 
         return bytes(data)
@@ -155,16 +172,11 @@ class PicoInterface:
         remote_path = self.remote_path(remote_path)
         encoded_path = self.encode(remote_path)
 
-        self.request(
-            "FS_WRITE_BEGIN",
-            encoded_path,
-            len(data)
-        )
+        self.request("FS_WRITE_BEGIN", encoded_path, len(data))
 
         try:
             for offset in range(0, len(data), CHUNK_SIZE):
                 chunk = data[offset:offset + CHUNK_SIZE]
-
                 self.request(
                     "FS_WRITE_CHUNK",
                     encoded_path,
@@ -172,10 +184,7 @@ class PicoInterface:
                     base64.b64encode(chunk).decode("ascii")
                 )
 
-            self.request(
-                "FS_WRITE_END",
-                encoded_path
-            )
+            self.request("FS_WRITE_END", encoded_path)
 
         except Exception:
             try:
@@ -185,16 +194,10 @@ class PicoInterface:
             raise
 
     def mkdir(self, path):
-        self.request(
-            "FS_MKDIR",
-            self.encode(self.remote_path(path))
-        )
+        self.request("FS_MKDIR", self.encode(self.remote_path(path)))
 
     def remove(self, path):
-        self.request(
-            "FS_DELETE",
-            self.encode(self.remote_path(path))
-        )
+        self.request("FS_DELETE", self.encode(self.remote_path(path)))
 
     def rename(self, source, destination):
         self.request(
@@ -209,28 +212,139 @@ class PicoInterface:
 
     def cmd_help(self, args):
         for name, info in COMMANDS.items():
-            print("{:<8} {:<25} {}".format(
+            print("{:<10} {:<35} {}".format(
                 name,
                 info["usage"],
                 info["description"]
             ))
 
+    def cmd_ping(self, args):
+        ok = self.core.ping()
+        print("PONG" if ok else "PING failed")
+
+    def cmd_info(self, args):
+        info_str = self.core.info()
+        print(info_str)
+
+    def cmd_devices(self, args):
+        devs = self.core.devices.list()
+        if not devs:
+            print("No devices registered.")
+            return
+        print("{:<22} {:<20} {}".format("DEVICE ID", "TYPE", "PROPERTIES"))
+        print("-" * 65)
+        for dev in devs:
+            props = ", ".join(dev.get("properties", {}).keys())
+            print("{:<22} {:<20} {}".format(dev["id"], dev["type"], props))
+
+    def cmd_device(self, args):
+        if not args:
+            print("Usage:", COMMANDS["device"]["usage"])
+            return
+
+        action = args[0].lower()
+        if action == "info":
+            if len(args) != 2:
+                print("Usage: device info <device_id>")
+                return
+            info = self.core.devices.info(args[1])
+            print(json.dumps(info, indent=2))
+
+        elif action == "read":
+            if len(args) != 3:
+                print("Usage: device read <device_id> <property>")
+                return
+            val = self.core.devices.read(args[1], args[2])
+            print(f"{args[1]}.{args[2]} = {val}")
+
+        elif action == "write":
+            if len(args) < 4:
+                print("Usage: device write <device_id> <property> <value>")
+                return
+            val = " ".join(args[3:])
+            res = self.core.devices.write(args[1], args[2], val)
+            print(f"{args[1]}.{args[2]} -> {res}")
+
+        else:
+            print("Unknown device action:", action)
+
+    def cmd_apps(self, args):
+        apps = self.core.apps.list()
+        if not apps:
+            print("No applications registered.")
+            return
+        print("{:<15} {:<30} {}".format("APP NAME", "DESCRIPTION", "PROPERTIES"))
+        print("-" * 75)
+        for app in apps:
+            props = ", ".join(app.get("properties", {}).keys())
+            print("{:<15} {:<30} {}".format(
+                app["name"],
+                app.get("description", "")[:28],
+                props
+            ))
+
+    def cmd_app(self, args):
+        if not args:
+            print("Usage:", COMMANDS["app"]["usage"])
+            return
+
+        action = args[0].lower()
+        if action == "info":
+            if len(args) != 2:
+                print("Usage: app info <app_name>")
+                return
+            info = self.core.apps.info(args[1])
+            print(json.dumps(info, indent=2))
+
+        elif action == "read":
+            if len(args) != 3:
+                print("Usage: app read <app_name> <property>")
+                return
+            val = self.core.apps.read(args[1], args[2])
+            print(f"{args[1]}.{args[2]} = {val}")
+
+        elif action == "write":
+            if len(args) < 4:
+                print("Usage: app write <app_name> <property> <value>")
+                return
+            val = " ".join(args[3:])
+            res = self.core.apps.write(args[1], args[2], val)
+            print(f"{args[1]}.{args[2]} -> {res}")
+
+        else:
+            print("Unknown app action:", action)
+
+    def cmd_auto(self, args):
+        if not args:
+            print("Usage:", COMMANDS["auto"]["usage"])
+            return
+
+        subcmd = args[0].lower()
+        if subcmd == "on":
+            self.core.apps.write("thermal", "enabled", True)
+            print("Thermal auto mode: ON")
+        elif subcmd == "off":
+            self.core.apps.write("thermal", "enabled", False)
+            print("Thermal auto mode: OFF")
+        elif subcmd == "set":
+            if len(args) != 2:
+                print("Usage: auto set <threshold>")
+                return
+            new_thresh = self.core.apps.write("thermal", "threshold", float(args[1]))
+            print(f"Thermal threshold set to: {new_thresh}C")
+        else:
+            print("Unknown auto action:", subcmd)
+
     def cmd_ls(self, args):
         path = args[0] if args else "."
-
         entries = self.list_dir(path)
-
         for entry in entries:
             name = entry["name"]
             kind = entry["type"]
-
             if kind == "dir":
                 print("[DIR]  " + name)
             else:
-                print("{:>8}  {}".format(
-                    entry.get("size", 0),
-                    name
-                ))
+                print("{:>8}  {}".format(entry.get("size", 0), name))
 
     def cmd_cd(self, args):
         if not args:
@@ -238,16 +352,10 @@ class PicoInterface:
             return
 
         target = self.remote_path(args[0])
-
-        # Verify that the target exists and is a directory.
-        info = json.loads(
-            self.request("FS_STAT", self.encode(target))
-        )
-
+        info = json.loads(self.request("FS_STAT", self.encode(target)))
         if info["type"] != "dir":
             print("Not a directory:", target)
             return
-
         self.cwd = target
 
     def cmd_pwd(self, args):
@@ -257,7 +365,6 @@ class PicoInterface:
         if not args:
             print("Usage:", COMMANDS["cat"]["usage"])
             return
-
         data = self.read_file(args[0])
         print(data.decode("utf-8", errors="replace"))
 
@@ -265,10 +372,8 @@ class PicoInterface:
         if not args:
             print("Usage:", COMMANDS["put"]["usage"])
             return
-
         local = args[0]
         remote = args[1] if len(args) > 1 else os.path.basename(local)
-
         self.write_file(local, remote)
         print("Uploaded:", remote)
 
@@ -276,22 +381,17 @@ class PicoInterface:
         if not args:
             print("Usage:", COMMANDS["get"]["usage"])
             return
-
         remote = args[0]
         local = args[1] if len(args) > 1 else os.path.basename(remote)
-
         data = self.read_file(remote)
-
         with open(local, "wb") as file:
             file.write(data)
-
         print("Downloaded:", local)
 
     def cmd_mkdir(self, args):
         if not args:
             print("Usage:", COMMANDS["mkdir"]["usage"])
             return
-
         self.mkdir(args[0])
         print("Directory created.")
 
@@ -299,7 +399,6 @@ class PicoInterface:
         if not args:
             print("Usage:", COMMANDS["rm"]["usage"])
             return
-
         self.remove(args[0])
         print("Deleted.")
 
@@ -307,10 +406,9 @@ class PicoInterface:
         if len(args) != 2:
             print("Usage:", COMMANDS["mv"]["usage"])
             return
-
         self.rename(args[0], args[1])
         print("Moved.")
-        
+
     def cmd_reboot(self, args):
         self.core.reboot()
         print("Rebooting Pico...")
@@ -320,7 +418,6 @@ class PicoInterface:
         if not args:
             print("Usage:", COMMANDS["send"]["usage"])
             return
-
         result = self.request(*args)
         print(result)
 
@@ -329,11 +426,18 @@ class PicoInterface:
     # --------------------------------------------------------
 
     def run(self):
-        print("YumeCore Pico Filesystem Interface")
+        print("YumeCore Pico Control & Filesystem Interface")
         print("Type 'help' for commands.\n")
 
         handlers = {
             "help": self.cmd_help,
+            "ping": self.cmd_ping,
+            "info": self.cmd_info,
+            "devices": self.cmd_devices,
+            "device": self.cmd_device,
+            "apps": self.cmd_apps,
+            "app": self.cmd_app,
+            "auto": self.cmd_auto,
             "ls": self.cmd_ls,
             "cd": self.cmd_cd,
             "pwd": self.cmd_pwd,

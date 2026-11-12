@@ -6,13 +6,14 @@
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-11-13
 
 ### Added
-- Phase 7: Controller 调度纯化与 main.py 重组。
-  - `PICO/controller.py`: 彻底移除硬件与业务逻辑，专职负责周期任务调度、设备 `update()` 与应用生命周期管理。
-  - `PICO/main.py`: 实现公平主循环调度（限流单轮最多处理 1 条串口输入，无条件持续调用 `controller.tick()`，彻底避免高频通信饿死控制任务），组装 `CommandDispatcher` 负责协议路由。
-  - `tests/test_controller_and_main.py`: 调度器与指令分发器集成测试全部通过。
+- Phase 8: PC 客户端适配与 CLI 增强。
+  - `PC/host.py`: 使用 `SerialTransport` 替代裸 pyserial 读写；新增 `devices` 代理（`list`, `info`, `read`, `write`）与 `apps` 代理（`list`, `info`, `read`, `write`）；保持 `reboot()` 直连与原有 `led`, `auto`, `status`, `temp` 便捷方法。
+  - `PC/interface.py`: CLI 新增通用 `devices`、`device`、`apps`、`app`、`ping`、`info` 命令；`auto on/off/set` 映射为应用代理调用；完整保留全部文件系统操作指令（`ls`, `cat`, `put`, `get`, `mkdir`, `rm`, `mv`）。
+  - `tests/test_pc_host_and_interface.py`: 代理调用、直连重启与兼容层测试全部通过。
+  - 全套单元与集成测试（共 27 项测试）100% 通过。
 
 ---
 
