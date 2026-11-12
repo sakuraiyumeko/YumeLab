@@ -34,10 +34,10 @@
   - [x] 实现 `PICO/device_service.py`（处理 `DEVICE_LIST`、`DEVICE_INFO`、`DEVICE_READ`、`DEVICE_WRITE`）
   - [x] 单元/功能验证：设备注册、读写与列表查询
 
-- [ ] **Phase 5: 事件总线系统 (Event System)**
-  - [ ] 实现 `PICO/events.py`（`EventBus` 发布/订阅）
-  - [ ] 实现单个订阅者异常隔离机制
-  - [ ] 接入 `TemperatureSensor`：在温度采样变化时发布 `sensor.temperature.changed`
+- [x] **Phase 5: 事件总线系统 (Event System)**
+  - [x] 实现 `PICO/events.py`（`EventBus` 发布/订阅）
+  - [x] 实现单个订阅者异常隔离机制
+  - [x] 接入 `TemperatureSensor`：在温度采样变化时发布 `sensor.temperature.changed`
 
 - [ ] **Phase 6: 应用层抽象与 AppService**
   - [ ] 创建 `PICO/applications/__init__.py`
