@@ -1,0 +1,33 @@
+# YumeCore 重构进度跟踪 (AGENT_PROGRESS.md)
+
+- **当前阶段**: Phase 0: 断点续作与版本控制初始化（即将进入 Phase 1）
+- **上次更新时间**: 2026-11-13
+- **Git Commit 状态**: 准备 Baseline Commit
+
+---
+
+## 阶段进展状态
+
+| 阶段 | 状态 | 开始时间 | 完成时间 | 对应 Commit |
+|---|---|---|---|---|
+| Phase 0: 断点追踪初始化 | 进行中 | 2026-11-13 | - | - |
+| Phase 1: 传输层分离 | 未开始 | - | - | - |
+| Phase 2: 协议层重构 | 未开始 | - | - | - |
+| Phase 3: 硬件隔离与资源管理 | 未开始 | - | - | - |
+| Phase 4: 设备层与 DeviceService | 未开始 | - | - | - |
+| Phase 5: 事件总线系统 | 未开始 | - | - | - |
+| Phase 6: 应用层与 AppService | 未开始 | - | - | - |
+| Phase 7: Controller与主循环调度 | 未开始 | - | - | - |
+| Phase 8: PC客户端适配与CLI增强 | 未开始 | - | - | - |
+
+---
+
+## 未决问题与风险追踪
+- **风险**: MicroPython 内存占用需在引入新模块后保持克制，避免在大循环内无节制创建临时 dict。
+- **应对**: 设备属性读取与事件分发避免过度封装，传感器事件采用变化阈值防刷机制。
+
+---
+
+## 下一步行动
+1. 建立 Phase 0 baseline commit。
+2. 开始 Phase 1：实现 `PICO/transport.py` 和 `PC/transport.py`。
