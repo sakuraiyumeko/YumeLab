@@ -1,165 +1,104 @@
+"""
+YumeCore Controller & Runtime.
+Responsible for task scheduling, periodic device updates,
+and application lifecycle management.
+Does NOT directly depend on hardware pins or communication protocols.
+"""
 
-import time
-from machine import ADC
-from hardware import Hardware
+try:
+    import time
+    ticks_ms = time.ticks_ms
+    ticks_diff = time.ticks_diff
+except AttributeError:
+    import time
+    ticks_ms = lambda: int(time.monotonic() * 1000)
+    ticks_diff = lambda a, b: a - b
 
 
 class Controller:
-    SAMPLE_INTERVAL = 1000
-    DEFAULT_THRESHOLD = 45.0
-
-    def __init__(self, hardware=None):
-        self.hardware = hardware or Hardware()
-        self.sensor = ADC(4)
+    def __init__(self, registry=None, events=None, update_interval_ms=1000):
+        self.registry = registry
+        self.events = events
+        self.update_interval_ms = update_interval_ms
 
         self.running = True
-        self.auto_mode = True
-        self.threshold = self.DEFAULT_THRESHOLD
-
-        self.temperature = None
-        self.last_sample = None
+        self._tasks = {}  # name -> {"callback": cb, "interval_ms": int, "last_run": int}
+        self._apps = []
+        self._last_device_update = None
         self.last_error = None
-
-        self.request_count = 0
         self.error_count = 0
-        self.last_command = None
 
-    def read_temperature(self):
-        raw = self.sensor.read_u16()
-        voltage = raw * 3.3 / 65535
-        return 27 - (voltage - 0.706) / 0.001721
+    def register_task(self, name, callback, interval_ms):
+        if not callable(callback):
+            raise TypeError("Task callback must be callable")
+        self._tasks[name] = {
+            "callback": callback,
+            "interval_ms": max(1, int(interval_ms)),
+            "last_run": None,
+        }
 
-    def apply_control(self):
-        if not self.auto_mode or self.temperature is None:
-            return
+    def unregister_task(self, name):
+        if name in self._tasks:
+            del self._tasks[name]
 
-        if self.temperature >= self.threshold:
-            self.hardware.write("led", "ON")
-        else:
-            self.hardware.write("led", "OFF")
+    def register_app(self, app):
+        if app not in self._apps:
+            self._apps.append(app)
+
+    def unregister_app(self, app):
+        if app in self._apps:
+            self._apps.remove(app)
 
     def tick(self):
+        """
+        Runs one iteration of non-blocking scheduling:
+        - Periodic device updates
+        - Registered applications updates
+        - Custom periodic tasks
+        """
         if not self.running:
             return False
 
-        now = time.ticks_ms()
+        now = ticks_ms()
+        activity = False
 
-        if self.last_sample is not None:
-            elapsed = time.ticks_diff(now, self.last_sample)
-            if elapsed < self.SAMPLE_INTERVAL:
-                return False
+        # 1. Periodic device updates
+        if self.registry is not None:
+            if self._last_device_update is None or ticks_diff(now, self._last_device_update) >= self.update_interval_ms:
+                self._last_device_update = now
+                activity = True
+                for dev in self.registry.all():
+                    try:
+                        dev.update()
+                    except Exception as exc:
+                        self.last_error = str(exc)
+                        self.error_count += 1
 
-        self.last_sample = now
+        # 2. Application updates (e.g. debounce servicing)
+        for app in self._apps:
+            if hasattr(app, "update") and callable(app.update):
+                try:
+                    app.update()
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    self.error_count += 1
 
-        try:
-            self.temperature = self.read_temperature()
-            self.apply_control()
-            self.last_error = None
-            return True
+        # 3. Scheduled custom tasks
+        for name, task in list(self._tasks.items()):
+            last_run = task["last_run"]
+            if last_run is None or ticks_diff(now, last_run) >= task["interval_ms"]:
+                task["last_run"] = now
+                activity = True
+                try:
+                    task["callback"]()
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    self.error_count += 1
 
-        except Exception as exc:
-            self.last_error = str(exc)
-            self.error_count += 1
-            return False
-
-    def get_status(self):
-        led = self.hardware.read("led")
-        led_state = "ON" if led else "OFF"
-
-        if self.temperature is None:
-            temp = "N/A"
-        else:
-            temp = "{:.1f}C".format(self.temperature)
-
-        mode = "AUTO" if self.auto_mode else "MANUAL"
-
-        return (
-            "TEMP={} LED={} MODE={} THRESHOLD={:.1f}C"
-            .format(temp, led_state, mode, self.threshold)
-        )
-
-    def dispatch(self, command, args):
-        if not self.running:
-            raise RuntimeError("CONTROLLER_STOPPED")
-
-        self.request_count += 1
-        self.last_command = command
-
-        try:
-            if command == "STATUS":
-                if args:
-                    raise ValueError("INVALID_ARGUMENT")
-                return self.get_status()
-
-            if command == "TEMP":
-                if args:
-                    raise ValueError("INVALID_ARGUMENT")
-
-                if self.temperature is None:
-                    return "TEMP=UNAVAILABLE"
-
-                return "TEMP={:.1f}C".format(self.temperature)
-
-            if command == "AUTO":
-                if len(args) != 1:
-                    raise ValueError("INVALID_ARGUMENT")
-
-                state = args[0].upper()
-
-                if state == "ON":
-                    self.auto_mode = True
-                    self.apply_control()
-                elif state == "OFF":
-                    self.auto_mode = False
-                else:
-                    raise ValueError("INVALID_AUTO_STATE")
-
-                return "AUTO={}".format(state)
-
-            if command == "AUTO_SET":
-                if len(args) != 1:
-                    raise ValueError("INVALID_ARGUMENT")
-
-                threshold = float(args[0])
-
-                if not 0 <= threshold <= 100:
-                    raise ValueError("INVALID_THRESHOLD")
-
-                self.threshold = threshold
-                self.apply_control()
-
-                return "THRESHOLD={:.1f}C".format(threshold)
-
-            if command == "LED":
-                # Manual LED control switches to manual mode.
-                self.auto_mode = False
-
-            if command == "HW_SET":
-                if len(args) == 2 and args[0] == "led":
-                    self.auto_mode = False
-
-            return self.hardware.dispatch(command, args)
-
-        except Exception:
-            self.error_count += 1
-            raise
+        return activity
 
     def stop(self):
         self.running = False
-        self.auto_mode = False
-        self.hardware.deinit()
 
     def start(self):
-        if self.running:
-            return
-
-        self.hardware = Hardware()
         self.running = True
-        self.auto_mode = True
-        self.temperature = None
-        self.last_sample = None
-
-    def reset_stats(self):
-        self.request_count = 0
-        self.error_count = 0
-        self.last_command = None

@@ -9,10 +9,10 @@
 ## [Unreleased]
 
 ### Added
-- Phase 6: 应用层抽象、Thermal 迁移与 AppService。
-  - `PICO/applications/thermal.py`: 实现 `ThermalButton` 应用，订阅温度变化事件，实现阈值比较、滞回（hysteresis）与去抖（debounce），可选直驱 LED 执行器或发布应用事件。
-  - `PICO/app_service.py`: 实现通用应用服务层，支持 `APP_LIST`、`APP_INFO`、`APP_READ`、`APP_WRITE`，并向后兼容 `AUTO`、`AUTO_SET`、`TEMP` 命令。
-  - `tests/test_applications.py`: 滞回、阈值触发与 AppService 通用配置测试全部通过。
+- Phase 7: Controller 调度纯化与 main.py 重组。
+  - `PICO/controller.py`: 彻底移除硬件与业务逻辑，专职负责周期任务调度、设备 `update()` 与应用生命周期管理。
+  - `PICO/main.py`: 实现公平主循环调度（限流单轮最多处理 1 条串口输入，无条件持续调用 `controller.tick()`，彻底避免高频通信饿死控制任务），组装 `CommandDispatcher` 负责协议路由。
+  - `tests/test_controller_and_main.py`: 调度器与指令分发器集成测试全部通过。
 
 ---
 

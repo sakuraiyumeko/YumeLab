@@ -45,11 +45,11 @@
   - [x] 实现 `PICO/app_service.py`（处理 `APP_LIST`、`APP_INFO`、`APP_READ`、`APP_WRITE`）
   - [x] 验证应用通用读写配置与温度触发逻辑
 
-- [ ] **Phase 7: Controller 调度纯化与 main.py 重组**
-  - [ ] 重构 `PICO/controller.py`（仅负责周期任务调度、设备轮询更新与应用更新）
-  - [ ] 重构 `PICO/main.py`（组装各层组件，实现公平调度主循环）
-  - [ ] 确保主循环持续调用 `controller.tick()`，限流每轮处理 1 条串口消息
-  - [ ] 验证无串口通信饥饿，文件系统与 REBOOT 正常
+- [x] **Phase 7: Controller 调度纯化与 main.py 重组**
+  - [x] 重构 `PICO/controller.py`（仅负责周期任务调度、设备轮询更新与应用更新）
+  - [x] 重构 `PICO/main.py`（组装各层组件，实现公平调度主循环）
+  - [x] 确保主循环持续调用 `controller.tick()`，限流每轮处理 1 条串口消息
+  - [x] 验证无串口通信饥饿，文件系统与 REBOOT 正常
 
 - [ ] **Phase 8: PC 客户端适配与 CLI 增强**
   - [ ] 重构 `PC/host.py`（接入 `transport.py`，新增 `devices` 与 `apps` 代理）

@@ -1,6 +1,9 @@
 
 import os
-import ubinascii
+try:
+    import ubinascii
+except ImportError:
+    import binascii as ubinascii
 import json
 
 

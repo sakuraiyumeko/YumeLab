@@ -1,131 +1,167 @@
+"""
+YumeCore Main Entry Point for Raspberry Pi Pico.
+Assembles the system layers and executes the fair scheduling loop.
+"""
 
 import sys
 import os
 import time
-import machine
-import uselect
 
-from controller import Controller
+try:
+    import machine
+except ImportError:
+    machine = None
+
+from transport import Transport
 from protocol import parse_request, make_response
+from hardware import HardwareManager
+from devices import DeviceRegistry
+from sensors import TemperatureSensor
+from actuators import LED
+from events import EventBus
+from applications.thermal import ThermalButton
+from device_service import DeviceService
+from app_service import AppService
 from filesystem import FileSystem
+from controller import Controller
 
 
-controller = Controller()
-filesystem = FileSystem()
+class CommandDispatcher:
+    """
+    Routes parsed protocol requests to appropriate domain services.
+    """
+    def __init__(self, device_service, app_service, filesystem):
+        self.device_service = device_service
+        self.app_service = app_service
+        self.filesystem = filesystem
+
+    def dispatch(self, message):
+        request_id, command, args, error = parse_request(message)
+
+        if error:
+            return make_response(
+                request_id or "0000",
+                "ERROR",
+                error
+            ), False
+
+        try:
+            # 1. System Level Commands
+            if command == "PING":
+                if args:
+                    return make_response(request_id, "ERROR", "INVALID_ARGUMENT"), False
+                return make_response(request_id, "OK", "PONG"), False
+
+            elif command == "INFO":
+                if args:
+                    return make_response(request_id, "ERROR", "INVALID_ARGUMENT"), False
+                info = os.uname()
+                return make_response(
+                    request_id,
+                    "OK",
+                    "MACHINE={} RELEASE={}".format(info.machine, info.release)
+                ), False
+
+            elif command == "REBOOT":
+                if args:
+                    return make_response(request_id, "ERROR", "INVALID_ARGUMENT"), False
+                return make_response(request_id, "OK", "REBOOTING"), True
+
+            # 2. Device Service (DEVICE_LIST, DEVICE_INFO, DEVICE_READ, DEVICE_WRITE, STATUS, LED, HW_*)
+            elif self.device_service and self.device_service.can_handle(command):
+                status, payload = self.device_service.handle(command, args)
+                return make_response(request_id, status, payload), False
+
+            # 3. Application Service (APP_LIST, APP_INFO, APP_READ, APP_WRITE, AUTO, AUTO_SET, TEMP)
+            elif self.app_service and self.app_service.can_handle(command):
+                status, payload = self.app_service.handle(command, args)
+                return make_response(request_id, status, payload), False
+
+            # 4. FileSystem Service (FS_*)
+            elif command.startswith("FS_") and self.filesystem:
+                result = self.filesystem.dispatch(command, args)
+                if result is None:
+                    return make_response(request_id, "ERROR", "UNKNOWN_COMMAND"), False
+                status, payload = result
+                return make_response(request_id, status, payload), False
+
+            return make_response(request_id, "ERROR", "UNKNOWN_COMMAND"), False
+
+        except Exception as exc:
+            return make_response(request_id, "ERROR", str(exc) or "OPERATION_FAILED"), False
 
 
-def dispatch(command, args):
-    if command == "PING":
-        if args:
-            return "ERROR", "INVALID_ARGUMENT"
-        return "OK", "PONG"
+def main():
+    # 1. Initialize Subsystems
+    hardware = HardwareManager()
+    registry = DeviceRegistry()
+    events = EventBus()
+    transport = Transport()
 
-    elif command == "INFO":
-        if args:
-            return "ERROR", "INVALID_ARGUMENT"
+    device_service = DeviceService(registry)
+    app_service = AppService()
+    filesystem = FileSystem()
 
-        info = os.uname()
+    controller = Controller(registry=registry, events=events, update_interval_ms=1000)
 
-        return "OK", "MACHINE={} RELEASE={}".format(
-            info.machine,
-            info.release
-        )
-
-    elif command == "REBOOT":
-        if args:
-            return "ERROR", "INVALID_ARGUMENT"
-        return "OK", "REBOOTING"
-
-    elif command in (
-        "STATUS",
-        "TEMP",
-        "AUTO",
-        "AUTO_SET",
-        "LED",
-        "HW_LIST",
-        "HW_GET",
-        "HW_SET",
-    ):
-        payload = controller.dispatch(command, args)
-        return "OK", payload
-
-    elif command.startswith("FS_"):
-        result = filesystem.dispatch(command, args)
-
-        if result is None:
-            return "ERROR", "UNKNOWN_COMMAND"
-
-        return result
-
-    return "ERROR", "UNKNOWN_COMMAND"
-
-
-def process_message(message):
-    request_id, command, args, error = parse_request(message)
-
-    if error:
-        return make_response(
-            request_id or "0000",
-            "ERROR",
-            error
-        ), False
+    # 2. Register Standard Hardware Devices
+    try:
+        led = LED(hardware, pin="LED", device_id="led", initial="OFF")
+        registry.register(led)
+    except Exception as exc:
+        print("[WARN] Failed to register LED:", exc)
+        led = None
 
     try:
-        status, payload = dispatch(command, args)
-
+        temp_sensor = TemperatureSensor(
+            hardware,
+            device_id="sensor.temperature",
+            event_bus=events,
+            deadband=0.1
+        )
+        registry.register(temp_sensor)
     except Exception as exc:
-        status = "ERROR"
-        payload = str(exc) or "OPERATION_FAILED"
+        print("[WARN] Failed to register TemperatureSensor:", exc)
+        temp_sensor = None
 
-    do_reboot = command == "REBOOT" and status == "OK"
+    # 3. Register Applications
+    if temp_sensor is not None:
+        thermal_app = ThermalButton(
+            sensor=temp_sensor,
+            events=events,
+            threshold=45.0,
+            hysteresis=1.0,
+            debounce_ms=100,
+            led_device=led
+        )
+        app_service.register_app(thermal_app)
+        controller.register_app(thermal_app)
 
-    return make_response(request_id, status, payload), do_reboot
+    # 4. Build Dispatcher
+    dispatcher = CommandDispatcher(device_service, app_service, filesystem)
 
-
-# Non-blocking USB CDC input
-poller = uselect.poll()
-poller.register(sys.stdin, uselect.POLLIN)
-
-line_buffer = ""
-overflow = False
-
-while True:
-    # Run the hardware control cycle independently.
-    controller.tick()
-
-    events = poller.poll(0)
-
-    if events:
-        char = sys.stdin.read(1)
-
-        if char:
-            if char == "\n":
-                if overflow:
-                    response = make_response(
-                        "0000",
-                        "ERROR",
-                        "LINE_TOO_LONG"
-                    )
-                    do_reboot = False
-                else:
-                    response, do_reboot = process_message(
-                        line_buffer + "\n"
-                    )
-
-                line_buffer = ""
-                overflow = False
-
-                sys.stdout.write(response)
-
+    # 5. Main Fair Scheduling Loop
+    while True:
+        # Rate-limited serial input processing (at most 1 message per iteration)
+        res = transport.read_line()
+        if res is not None:
+            line, is_overflow = res
+            if is_overflow:
+                transport.write(make_response("0000", "ERROR", "LINE_TOO_LONG"))
+            else:
+                response, do_reboot = dispatcher.dispatch(line)
+                transport.write(response)
                 if do_reboot:
                     time.sleep_ms(100)
-                    machine.soft_reset()
+                    if machine and hasattr(machine, "soft_reset"):
+                        machine.soft_reset()
 
-            elif char != "\r":
-                if len(line_buffer) < 256 and not overflow:
-                    line_buffer += char
-                else:
-                    overflow = True
+        # Unconditional continuous execution of periodic scheduler (prevents starvation)
+        controller.tick()
 
-    else:
-        time.sleep_ms(5)
+        # Brief yield
+        time.sleep_ms(1)
+
+
+if __name__ == "__main__":
+    main()

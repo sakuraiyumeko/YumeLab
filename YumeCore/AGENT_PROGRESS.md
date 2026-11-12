@@ -1,8 +1,8 @@
 # YumeCore 重构进度跟踪 (AGENT_PROGRESS.md)
 
-- **当前阶段**: Phase 7: Controller 调度纯化与 main.py 重组
+- **当前阶段**: Phase 8: PC 客户端适配与 CLI 增强
 - **上次更新时间**: 2026-11-13
-- **Git Commit 状态**: Phase 6 完成，准备进入 Phase 7
+- **Git Commit 状态**: Phase 7 完成，准备进入 Phase 8
 
 ---
 
@@ -16,12 +16,9 @@
 | Phase 3: 硬件隔离与资源管理 | 已完成 | 2026-11-13 | 2026-11-13 | 72a0eb6 |
 | Phase 4: 设备层与 DeviceService | 已完成 | 2026-11-13 | 2026-11-13 | 52217b0 |
 | Phase 5: 事件总线系统 | 已完成 | 2026-11-13 | 2026-11-13 | 5d88f96 |
-| Phase 6: 应用层与 AppService | 已完成 | 2026-11-13 | 2026-11-13 | (当前提交) |
-| Phase 7: Controller与主循环调度 | 进行中 | 2026-11-13 | - | - |
-| Phase 5: 事件总线系统 | 未开始 | - | - | - |
-| Phase 6: 应用层与 AppService | 未开始 | - | - | - |
-| Phase 7: Controller与主循环调度 | 未开始 | - | - | - |
-| Phase 8: PC客户端适配与CLI增强 | 未开始 | - | - | - |
+| Phase 6: 应用层与 AppService | 已完成 | 2026-11-13 | 2026-11-13 | b3bb04f |
+| Phase 7: Controller与主循环调度 | 已完成 | 2026-11-13 | 2026-11-13 | (当前提交) |
+| Phase 8: PC客户端适配与CLI增强 | 进行中 | 2026-11-13 | - | - |
 
 ---
 
