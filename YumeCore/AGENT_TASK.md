@@ -21,11 +21,11 @@
   - [x] 重构 `PC/protocol.py`（同步命令常量定义，移除命令校验）
   - [x] 验证 PING / INFO / FS_* 请求打包与解包
 
-- [ ] **Phase 3: 硬件资源隔离 (Hardware Layer)**
-  - [ ] 重构 `PICO/hardware.py`
-  - [ ] 实现 `HardwareManager`：GPIO 引脚占用追踪与互斥检查
-  - [ ] 严格隔离 RP2040 内部 ADC(4) 与外部 GPIO ADC（GPIO 26-28 = ADC 0-2）
-  - [ ] 移除 `hardware.py` 内的 `Device` 基类和设备实现
+- [x] **Phase 3: 硬件资源隔离 (Hardware Layer)**
+  - [x] 重构 `PICO/hardware.py`
+  - [x] 实现 `HardwareManager`：GPIO 引脚占用追踪与互斥检查
+  - [x] 严格隔离 RP2040 内部 ADC(4) 与外部 GPIO ADC（GPIO 26-28 = ADC 0-2）
+  - [x] 移除 `hardware.py` 内的 `Device` 基类和设备实现
 
 - [ ] **Phase 4: 设备层抽象与 DeviceService**
   - [ ] 实现 `PICO/devices.py`（`Device` 基类、`DeviceRegistry` 注册表）

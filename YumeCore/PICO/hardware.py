@@ -1,217 +1,160 @@
+"""
+YumeCore Hardware Layer.
+Manages low-level hardware resources (GPIO, PWM, ADC) on Raspberry Pi Pico.
+Enforces pin conflict detection and hardware resource ownership.
+Strictly distinguishes internal temperature sensor ADC(4) from GPIO ADC.
+"""
 
-import ujson
-from machine import Pin, PWM, ADC
-
-
-class Device:
-    device_type = "generic"
-    writable = False
-
-    def __init__(self, name):
-        self.name = name
-
-    def read(self):
-        raise NotImplementedError
-
-    def write(self, value):
-        raise ValueError("DEVICE_READ_ONLY")
-
-    def info(self):
-        return {
-            "name": self.name,
-            "type": self.device_type,
-            "writable": self.writable,
-        }
+try:
+    from machine import Pin, PWM, ADC
+except ImportError:
+    Pin = None
+    PWM = None
+    ADC = None
 
 
-class DigitalOutput(Device):
-    device_type = "digital_output"
-    writable = True
+class HardwareManager:
+    # On RP2040, valid ADC GPIOs are 26, 27, 28 (and 29 on some boards)
+    VALID_ADC_GPIOS = {26: 0, 27: 1, 28: 2, 29: 3}
+    INTERNAL_TEMP_CHANNEL = 4
 
-    def __init__(self, name, pin, initial=0):
-        super().__init__(name)
-        self.pin = Pin(pin, Pin.OUT)
-        self.pin.value(1 if initial else 0)
-
-    def read(self):
-        return self.pin.value()
-
-    def write(self, value):
-        value = str(value).upper()
-
-        if value in ("1", "ON", "TRUE", "HIGH"):
-            self.pin.on()
-        elif value in ("0", "OFF", "FALSE", "LOW"):
-            self.pin.off()
-        else:
-            raise ValueError("INVALID_DIGITAL_VALUE")
-
-        return self.read()
-
-
-class DigitalInput(Device):
-    device_type = "digital_input"
-
-    def __init__(self, name, pin, pull=None):
-        super().__init__(name)
-
-        if pull == "UP":
-            self.pin = Pin(pin, Pin.IN, Pin.PULL_UP)
-        elif pull == "DOWN":
-            self.pin = Pin(pin, Pin.IN, Pin.PULL_DOWN)
-        else:
-            self.pin = Pin(pin, Pin.IN)
-
-    def read(self):
-        return self.pin.value()
-
-
-class PWMOutput(Device):
-    device_type = "pwm_output"
-    writable = True
-
-    def __init__(self, name, pin, freq=1000, duty=0):
-        super().__init__(name)
-
-        self.pwm = PWM(Pin(pin))
-        self.pwm.freq(freq)
-        self.pwm.duty_u16(
-            int(max(0, min(100, duty)) * 65535 / 100)
-        )
-
-    def read(self):
-        return {
-            "frequency": self.pwm.freq(),
-            "duty": round(
-                self.pwm.duty_u16() * 100 / 65535, 2
-            ),
-        }
-
-    def write(self, value):
-        duty = float(value)
-
-        if not 0 <= duty <= 100:
-            raise ValueError("INVALID_PWM_DUTY")
-
-        self.pwm.duty_u16(int(duty * 65535 / 100))
-        return self.read()
-
-    def deinit(self):
-        self.pwm.deinit()
-
-
-class AnalogInput(Device):
-    device_type = "analog_input"
-
-    def __init__(self, name, pin):
-        super().__init__(name)
-        self.adc = ADC(Pin(pin))
-
-    def read(self):
-        return self.adc.read_u16()
-
-
-class Hardware:
     def __init__(self):
-        self.devices = {}
+        # Maps pin identifier to owner string
+        self._claimed_pins = {}
+        # Tracks created PWM instances for cleanup
+        self._pwms = {}
+        # Flag for internal temp sensor claim
+        self._internal_temp_claimed_by = None
 
-        # Pico onboard LED
-        self.register(
-            DigitalOutput("led", "LED", initial=0)
-        )
+    def _normalize_pin_id(self, pin_id):
+        """Converts pin identifier into canonical form (e.g. 'LED', or int 0..29)."""
+        if isinstance(pin_id, str):
+            pin_id_upper = pin_id.upper()
+            if pin_id_upper == "LED":
+                return "LED"
+            if pin_id_upper.startswith("GP"):
+                try:
+                    return int(pin_id_upper[2:])
+                except ValueError:
+                    pass
+            try:
+                return int(pin_id)
+            except ValueError:
+                return pin_id_upper
+        return pin_id
 
-    def register(self, device):
-        if not isinstance(device, Device):
-            raise TypeError("INVALID_DEVICE")
+    def claim_pin(self, pin_id, owner):
+        norm_pin = self._normalize_pin_id(pin_id)
+        if norm_pin in self._claimed_pins:
+            current_owner = self._claimed_pins[norm_pin]
+            if current_owner != owner:
+                raise ValueError(
+                    "PIN_CONFLICT: Pin {} already claimed by {}".format(norm_pin, current_owner)
+                )
+        self._claimed_pins[norm_pin] = owner
+        return norm_pin
 
-        if not device.name:
-            raise ValueError("INVALID_DEVICE_NAME")
+    def release_pin(self, pin_id):
+        norm_pin = self._normalize_pin_id(pin_id)
+        if norm_pin in self._claimed_pins:
+            del self._claimed_pins[norm_pin]
+        if norm_pin in self._pwms:
+            try:
+                self._pwms[norm_pin].deinit()
+            except Exception:
+                pass
+            del self._pwms[norm_pin]
 
-        if device.name in self.devices:
-            raise ValueError("DEVICE_ALREADY_REGISTERED")
+    def is_pin_claimed(self, pin_id):
+        norm_pin = self._normalize_pin_id(pin_id)
+        return norm_pin in self._claimed_pins
 
-        self.devices[device.name] = device
-        return device
+    def get_claimed_pins(self):
+        return dict(self._claimed_pins)
 
-    def unregister(self, name):
-        device = self.devices.get(name)
+    def create_pin(self, pin_id, mode=None, pull=None, owner="generic"):
+        norm_pin = self.claim_pin(pin_id, owner)
 
-        if device is None:
-            raise ValueError("DEVICE_NOT_FOUND")
+        if Pin is None:
+            raise RuntimeError("machine.Pin is not available in this environment")
 
-        if isinstance(device, PWMOutput):
-            device.deinit()
+        if mode is None:
+            mode = Pin.OUT
 
-        del self.devices[name]
+        kwargs = {}
+        if pull is not None:
+            kwargs["pull"] = pull
 
-    def get_device(self, name):
-        device = self.devices.get(name)
+        if norm_pin == "LED":
+            return Pin("LED", mode, **kwargs)
+        return Pin(norm_pin, mode, **kwargs)
 
-        if device is None:
-            raise ValueError("DEVICE_NOT_FOUND")
+    def create_pwm(self, pin_id, freq=1000, duty_u16=0, owner="pwm"):
+        norm_pin = self.claim_pin(pin_id, owner)
 
-        return device
+        if PWM is None:
+            raise RuntimeError("machine.PWM is not available in this environment")
 
-    def list_devices(self):
-        return [
-            device.info()
-            for device in self.devices.values()
-        ]
+        pin_obj = self.create_pin(norm_pin, mode=Pin.OUT, owner=owner)
+        pwm = PWM(pin_obj)
+        pwm.freq(freq)
+        pwm.duty_u16(duty_u16)
+        self._pwms[norm_pin] = pwm
+        return pwm
 
-    def read(self, name):
-        return self.get_device(name).read()
+    def create_adc(self, channel_or_pin, owner="adc"):
+        """
+        Creates an ADC instance.
+        - If channel_or_pin is 4 or 'INTERNAL_TEMP', configures ADC(4) without claiming a GPIO pin!
+        - If channel_or_pin is a GPIO (26, 27, 28, 29), claims that GPIO pin and configures ADC(Pin(gpio)).
+        """
+        if channel_or_pin == self.INTERNAL_TEMP_CHANNEL or str(channel_or_pin).upper() in ("INTERNAL_TEMP", "TEMP"):
+            return self.create_internal_temp_adc(owner=owner)
 
-    def write(self, name, value):
-        return self.get_device(name).write(value)
+        norm_pin = self._normalize_pin_id(channel_or_pin)
 
-    def get_status(self):
-        led = self.read("led")
-        return "LED={}".format("ON" if led else "OFF")
+        # Check if it's a valid ADC GPIO
+        if isinstance(norm_pin, int) and norm_pin not in self.VALID_ADC_GPIOS:
+            raise ValueError(
+                "INVALID_ADC_PIN: GPIO {} is not an ADC pin (valid: 26, 27, 28, 29)".format(norm_pin)
+            )
 
-    def dispatch(self, command, args):
-        if command == "STATUS":
-            if args:
-                raise ValueError("INVALID_ARGUMENT")
-            return self.get_status()
+        norm_pin = self.claim_pin(norm_pin, owner)
 
-        if command == "LED":
-            if len(args) != 1:
-                raise ValueError("INVALID_ARGUMENT")
+        if ADC is None:
+            raise RuntimeError("machine.ADC is not available in this environment")
 
-            state = self.write("led", args[0])
-            return "LED={}".format("ON" if state else "OFF")
+        pin_obj = Pin(norm_pin, Pin.IN)
+        return ADC(pin_obj)
 
-        if command == "HW_LIST":
-            if args:
-                raise ValueError("INVALID_ARGUMENT")
+    def create_internal_temp_adc(self, owner="temp_sensor"):
+        """
+        Creates internal RP2040 temperature sensor ADC(4).
+        Does NOT claim or touch physical GPIO 4!
+        """
+        if self._internal_temp_claimed_by and self._internal_temp_claimed_by != owner:
+            raise ValueError(
+                "RESOURCE_CONFLICT: Internal temp sensor already claimed by {}".format(
+                    self._internal_temp_claimed_by
+                )
+            )
+        self._internal_temp_claimed_by = owner
 
-            return ujson.dumps(self.list_devices())
+        if ADC is None:
+            raise RuntimeError("machine.ADC is not available in this environment")
 
-        if command == "HW_GET":
-            if len(args) != 1:
-                raise ValueError("INVALID_ARGUMENT")
+        return ADC(self.INTERNAL_TEMP_CHANNEL)
 
-            device = self.get_device(args[0])
-
-            return ujson.dumps({
-                "name": device.name,
-                "value": device.read(),
-            })
-
-        if command == "HW_SET":
-            if len(args) != 2:
-                raise ValueError("INVALID_ARGUMENT")
-
-            result = self.write(args[0], args[1])
-
-            return ujson.dumps({
-                "name": args[0],
-                "value": result,
-            })
-
-        raise ValueError("UNKNOWN_COMMAND")
+    def release_internal_temp_adc(self):
+        self._internal_temp_claimed_by = None
 
     def deinit(self):
-        for device in self.devices.values():
-            if isinstance(device, PWMOutput):
-                device.deinit()
+        """Releases and deinits all claimed hardware resources."""
+        for norm_pin, pwm in list(self._pwms.items()):
+            try:
+                pwm.deinit()
+            except Exception:
+                pass
+        self._pwms.clear()
+        self._claimed_pins.clear()
+        self._internal_temp_claimed_by = None

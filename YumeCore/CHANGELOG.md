@@ -9,10 +9,11 @@
 ## [Unreleased]
 
 ### Added
-- Phase 2: 协议层重构与解耦。
-  - `PICO/protocol.py` & `PC/protocol.py`: 彻底移除 `COMMANDS` 白名单硬编码，协议只负责 `ID CMD [ARGS...]` 帧格式解析与响应封装，版本升级为 `1.0`。
-  - 增加通用命令常量（`CMD_DEVICE_*`, `CMD_APP_*`），不限制未知扩展命令。
-  - `tests/test_protocol.py`: 全面测试任意命令编解码、参数提取与错误处理，100% 通过。
+- Phase 3: 硬件隔离与资源管理。
+  - `PICO/hardware.py`: 重构为纯粹的 `HardwareManager`，提供引脚占用追踪与冲突检测机制（`claim_pin` / `release_pin`）。
+  - 严格隔离 RP2040 内部温度传感器 ADC(4) 与物理引脚（`create_internal_temp_adc` 不占用 GPIO 4）。
+  - 移除非硬件职责的 `Device` 抽象、`Hardware` 设备集合与协议分发代码。
+  - `tests/test_hardware.py`: 单元测试引脚冲突、释放与 ADC4/GPIO4 隔离特性全部通过。
 
 ---
 
