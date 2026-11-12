@@ -1,22 +1,32 @@
+"""
+YumeCore Protocol Layer.
+Handles message framing, request/response encoding and decoding.
+Decoupled from specific commands and devices.
+"""
 
-PROTOCOL_VERSION = "0.3"
-
+PROTOCOL_VERSION = "1.0"
 ID_LENGTH = 4
 
-COMMANDS = {
-    "PING", "INFO", "STATUS", "LED", "REBOOT", "UPTIME",
+# Standard command constants (for reference/convenience, not used as a whitelist)
+CMD_PING = "PING"
+CMD_INFO = "INFO"
+CMD_REBOOT = "REBOOT"
 
-    "HW_LIST", "HW_GET", "HW_SET",
-    "TEMP", "AUTO", "AUTO_SET",
+# Generic Device commands
+CMD_DEVICE_LIST = "DEVICE_LIST"
+CMD_DEVICE_INFO = "DEVICE_INFO"
+CMD_DEVICE_READ = "DEVICE_READ"
+CMD_DEVICE_WRITE = "DEVICE_WRITE"
 
-    "FS_LIST", "FS_STAT", "FS_READ",
-    "FS_WRITE_BEGIN", "FS_WRITE_CHUNK",
-    "FS_WRITE_END", "FS_WRITE_ABORT",
-    "FS_MKDIR", "FS_DELETE", "FS_RENAME",
-}
+# Generic Application commands
+CMD_APP_LIST = "APP_LIST"
+CMD_APP_INFO = "APP_INFO"
+CMD_APP_READ = "APP_READ"
+CMD_APP_WRITE = "APP_WRITE"
 
 
 def valid_id(request_id):
+    """Validates that a request ID is a 4-digit string."""
     return (
         isinstance(request_id, str)
         and len(request_id) == ID_LENGTH
@@ -25,14 +35,17 @@ def valid_id(request_id):
 
 
 def make_request(request_id, command, *args):
+    """
+    Encodes a request: ID COMMAND [ARGS...]\n
+    Does not restrict commands against a whitelist.
+    """
     if not valid_id(request_id):
         raise ValueError("Invalid request ID")
 
-    command = command.upper()
+    if not command or not isinstance(command, str):
+        raise ValueError("Invalid command")
 
-    if command not in COMMANDS:
-        raise ValueError("Unknown command")
-
+    command = command.upper().strip()
     parts = [request_id, command]
     parts.extend(str(arg) for arg in args)
 
@@ -40,6 +53,13 @@ def make_request(request_id, command, *args):
 
 
 def parse_request(message):
+    """
+    Decodes a request string.
+    Returns: (request_id, command, args, error)
+    """
+    if not message:
+        return None, None, [], "EMPTY_REQUEST"
+
     parts = message.strip().split()
 
     if not parts:
@@ -56,30 +76,37 @@ def parse_request(message):
     command = parts[1].upper()
     args = parts[2:]
 
-    if command not in COMMANDS:
-        return request_id, command, args, "UNKNOWN_COMMAND"
-
     return request_id, command, args, None
 
 
 def make_response(request_id, status, payload=""):
+    """
+    Encodes a response: ID STATUS [PAYLOAD]\n
+    """
     if not valid_id(request_id):
         raise ValueError("Invalid response ID")
 
-    status = status.upper()
+    status = status.upper().strip()
 
     if status not in ("OK", "ERROR"):
         raise ValueError("Invalid response status")
 
     parts = [request_id, status]
 
-    if payload:
+    if payload is not None and str(payload) != "":
         parts.append(str(payload))
 
     return " ".join(parts) + "\n"
 
 
 def parse_response(message):
+    """
+    Decodes a response string: ID STATUS [PAYLOAD]
+    Returns: (request_id, status, payload)
+    """
+    if not message:
+        raise ValueError("Empty response")
+
     parts = message.strip().split(" ", 2)
 
     if len(parts) < 2:
@@ -89,6 +116,8 @@ def parse_response(message):
 
     if not valid_id(request_id):
         raise ValueError("Invalid response ID")
+
+    status = status.upper()
 
     if status not in ("OK", "ERROR"):
         raise ValueError("Invalid response status")

@@ -16,10 +16,10 @@
   - [x] 实现 `PC/transport.py`（串口包装、单调时钟超时控制）
   - [x] 验证基本字符串收发与超时处理
 
-- [ ] **Phase 2: 协议层重构 (Protocol Layer)**
-  - [ ] 重构 `PICO/protocol.py`（移除 COMMANDS 白名单，保留格式解析）
-  - [ ] 重构 `PC/protocol.py`（同步命令常量定义，移除命令校验）
-  - [ ] 验证 PING / INFO / FS_* 请求打包与解包
+- [x] **Phase 2: 协议层重构 (Protocol Layer)**
+  - [x] 重构 `PICO/protocol.py`（移除 COMMANDS 白名单，保留格式解析）
+  - [x] 重构 `PC/protocol.py`（同步命令常量定义，移除命令校验）
+  - [x] 验证 PING / INFO / FS_* 请求打包与解包
 
 - [ ] **Phase 3: 硬件资源隔离 (Hardware Layer)**
   - [ ] 重构 `PICO/hardware.py`

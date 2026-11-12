@@ -9,10 +9,10 @@
 ## [Unreleased]
 
 ### Added
-- Phase 1: 传输层分离。
-  - `PICO/transport.py`: 封装 `Transport` 类，支持 `uselect.poll` 非阻塞轮询输入，行缓冲区限长 256 字节，带换行分帧与溢出检测，单次轮询限流保护主循环。
-  - `PC/transport.py`: 封装 `SerialTransport` 类，管理串口生命周期、基于单调时钟的高精度超时行读取 `readline()` 与异常处理。
-  - `tests/test_transport.py`: 编写并通过了传输层收发、超时与缓冲区溢出测试用例。
+- Phase 2: 协议层重构与解耦。
+  - `PICO/protocol.py` & `PC/protocol.py`: 彻底移除 `COMMANDS` 白名单硬编码，协议只负责 `ID CMD [ARGS...]` 帧格式解析与响应封装，版本升级为 `1.0`。
+  - 增加通用命令常量（`CMD_DEVICE_*`, `CMD_APP_*`），不限制未知扩展命令。
+  - `tests/test_protocol.py`: 全面测试任意命令编解码、参数提取与错误处理，100% 通过。
 
 ---
 
