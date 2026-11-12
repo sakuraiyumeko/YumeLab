@@ -27,12 +27,12 @@
   - [x] 严格隔离 RP2040 内部 ADC(4) 与外部 GPIO ADC（GPIO 26-28 = ADC 0-2）
   - [x] 移除 `hardware.py` 内的 `Device` 基类和设备实现
 
-- [ ] **Phase 4: 设备层抽象与 DeviceService**
-  - [ ] 实现 `PICO/devices.py`（`Device` 基类、`DeviceRegistry` 注册表）
-  - [ ] 实现 `PICO/sensors.py`（`TemperatureSensor`、`AnalogSensor`、`DigitalInputSensor`）
-  - [ ] 实现 `PICO/actuators.py`（`LED`、`DigitalOutput`、`PWMOutput`）
-  - [ ] 实现 `PICO/device_service.py`（处理 `DEVICE_LIST`、`DEVICE_INFO`、`DEVICE_READ`、`DEVICE_WRITE`）
-  - [ ] 单元/功能验证：设备注册、读写与列表查询
+- [x] **Phase 4: 设备层抽象与 DeviceService**
+  - [x] 实现 `PICO/devices.py`（`Device` 基类、`DeviceRegistry` 注册表）
+  - [x] 实现 `PICO/sensors.py`（`TemperatureSensor`、`AnalogSensor`、`DigitalInputSensor`）
+  - [x] 实现 `PICO/actuators.py`（`LED`、`DigitalOutput`、`PWMOutput`）
+  - [x] 实现 `PICO/device_service.py`（处理 `DEVICE_LIST`、`DEVICE_INFO`、`DEVICE_READ`、`DEVICE_WRITE`）
+  - [x] 单元/功能验证：设备注册、读写与列表查询
 
 - [ ] **Phase 5: 事件总线系统 (Event System)**
   - [ ] 实现 `PICO/events.py`（`EventBus` 发布/订阅）

@@ -9,11 +9,12 @@
 ## [Unreleased]
 
 ### Added
-- Phase 3: 硬件隔离与资源管理。
-  - `PICO/hardware.py`: 重构为纯粹的 `HardwareManager`，提供引脚占用追踪与冲突检测机制（`claim_pin` / `release_pin`）。
-  - 严格隔离 RP2040 内部温度传感器 ADC(4) 与物理引脚（`create_internal_temp_adc` 不占用 GPIO 4）。
-  - 移除非硬件职责的 `Device` 抽象、`Hardware` 设备集合与协议分发代码。
-  - `tests/test_hardware.py`: 单元测试引脚冲突、释放与 ADC4/GPIO4 隔离特性全部通过。
+- Phase 4: 设备层抽象与 DeviceService。
+  - `PICO/devices.py`: 定义 `Device` 基类（统一声明 `id`、`type`、`properties`，标准化 `info/read/write/update/deinit`）与 `DeviceRegistry`。
+  - `PICO/sensors.py`: 实现 `TemperatureSensor`（基于内部 ADC4 采样与温标转换）、`AnalogSensor`、`DigitalInputSensor`。
+  - `PICO/actuators.py`: 实现 `LED`（支持 ON/OFF/TOGGLE 状态控制）、`DigitalOutput`、`PWMOutput`。
+  - `PICO/device_service.py`: 专门处理 `DEVICE_LIST`、`DEVICE_INFO`、`DEVICE_READ`、`DEVICE_WRITE` 通用设备请求，并兼容原有 `STATUS`、`LED`、`HW_*` 命令。
+  - `tests/test_devices.py`: 设备注册、传感器读取、执行器写入及 DeviceService 协议分发测试全部通过。
 
 ---
 
