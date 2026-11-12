@@ -9,10 +9,10 @@
 ## [Unreleased]
 
 ### Added
-- Phase 5: 事件总线系统。
-  - `PICO/events.py`: 实现进程内发布/订阅事件总线 `EventBus`，支持多订阅者分发与异常隔离。
-  - `TemperatureSensor` 接入 `EventBus`：带死区判定，在温度变化时自动发布 `sensor.temperature.changed` 事件。
-  - `tests/test_events.py`: 包含多订阅者测试、异常隔离测试及温感事件集成测试，全部通过。
+- Phase 6: 应用层抽象、Thermal 迁移与 AppService。
+  - `PICO/applications/thermal.py`: 实现 `ThermalButton` 应用，订阅温度变化事件，实现阈值比较、滞回（hysteresis）与去抖（debounce），可选直驱 LED 执行器或发布应用事件。
+  - `PICO/app_service.py`: 实现通用应用服务层，支持 `APP_LIST`、`APP_INFO`、`APP_READ`、`APP_WRITE`，并向后兼容 `AUTO`、`AUTO_SET`、`TEMP` 命令。
+  - `tests/test_applications.py`: 滞回、阈值触发与 AppService 通用配置测试全部通过。
 
 ---
 

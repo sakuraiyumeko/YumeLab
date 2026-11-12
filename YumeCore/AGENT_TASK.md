@@ -39,11 +39,11 @@
   - [x] 实现单个订阅者异常隔离机制
   - [x] 接入 `TemperatureSensor`：在温度采样变化时发布 `sensor.temperature.changed`
 
-- [ ] **Phase 6: 应用层抽象与 AppService**
-  - [ ] 创建 `PICO/applications/__init__.py`
-  - [ ] 实现 `PICO/applications/thermal.py`（`ThermalButton`：订阅温度事件，滞回与去抖）
-  - [ ] 实现 `PICO/app_service.py`（处理 `APP_LIST`、`APP_INFO`、`APP_READ`、`APP_WRITE`）
-  - [ ] 验证应用通用读写配置与温度触发逻辑
+- [x] **Phase 6: 应用层抽象与 AppService**
+  - [x] 创建 `PICO/applications/__init__.py`
+  - [x] 实现 `PICO/applications/thermal.py`（`ThermalButton`：订阅温度事件，滞回与去抖）
+  - [x] 实现 `PICO/app_service.py`（处理 `APP_LIST`、`APP_INFO`、`APP_READ`、`APP_WRITE`）
+  - [x] 验证应用通用读写配置与温度触发逻辑
 
 - [ ] **Phase 7: Controller 调度纯化与 main.py 重组**
   - [ ] 重构 `PICO/controller.py`（仅负责周期任务调度、设备轮询更新与应用更新）
