@@ -149,3 +149,76 @@ class DigitalInputSensor(Device):
 
     def deinit(self):
         self.hardware.release_pin(self.pin)
+
+
+
+"""
+Specific Sensors
+"""
+
+class LightSensor(AnalogSensor):
+    device_type = "light_sensor"
+
+    def __init__(
+        self,
+        hardware,
+        pin,
+        device_id=None,
+        dark_raw=1040,
+        bright_raw=65535,
+        event_bus=None,
+        deadband=1.0
+    ):
+        self.dark_raw = dark_raw
+        self.bright_raw = bright_raw
+        self.event_bus = event_bus
+        self.deadband = deadband
+        self._last_published_brightness = None
+
+        super().__init__(hardware, pin, device_id)
+
+        self.properties["brightness"] = {
+            "readable": True,
+            "writable": False,
+            "unit": "%"
+        }
+
+    def _get_brightness(self):
+        value = (
+            (self._current_raw - self.dark_raw)
+            / (self.bright_raw - self.dark_raw)
+            * 100
+        )
+        return round(max(0, min(100, value)), 1)
+
+    def update(self):
+        super().update()
+
+        brightness = self._get_brightness()
+
+        if self.event_bus is None:
+            return
+
+        should_publish = (
+            self._last_published_brightness is None
+            or abs(
+                brightness - self._last_published_brightness
+            ) >= self.deadband
+        )
+
+        if should_publish:
+            self._last_published_brightness = brightness
+
+            self.event_bus.publish(
+                "sensor.light.changed",
+                {
+                    "value": brightness,
+                    "raw": self._current_raw
+                }
+            )
+
+    def read(self, property_name):
+        if property_name == "brightness":
+            return self._get_brightness()
+
+        return super().read(property_name)

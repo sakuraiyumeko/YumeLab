@@ -16,7 +16,7 @@ from transport import Transport
 from protocol import parse_request, make_response
 from hardware import HardwareManager
 from devices import DeviceRegistry
-from sensors import TemperatureSensor, AnalogSensor
+from sensors import TemperatureSensor, LightSensor
 from actuators import LED
 from events import EventBus
 from applications.thermal import ThermalButton
@@ -125,10 +125,12 @@ def main():
         temp_sensor = None
         
     try:
-        light_sensor = AnalogSensor(
+        light_sensor = LightSensor(
             hardware,
             pin=26,
-            device_id="sensor.light"
+            device_id="sensor.light",
+            event_bus=events,
+            deadband=1.0
         )
         registry.register(light_sensor)
     except Exception as exc:
