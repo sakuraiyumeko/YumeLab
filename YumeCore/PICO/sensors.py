@@ -96,6 +96,7 @@ class AnalogSensor(Device):
 
         self._adc = hardware.create_adc(pin, owner=self.device_id)
         self._current_raw = 0
+        self.update()
 
     def update(self):
         self._current_raw = self._adc.read_u16()

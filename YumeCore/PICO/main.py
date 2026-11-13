@@ -16,7 +16,7 @@ from transport import Transport
 from protocol import parse_request, make_response
 from hardware import HardwareManager
 from devices import DeviceRegistry
-from sensors import TemperatureSensor
+from sensors import TemperatureSensor, AnalogSensor
 from actuators import LED
 from events import EventBus
 from applications.thermal import ThermalButton
@@ -123,6 +123,17 @@ def main():
     except Exception as exc:
         print("[WARN] Failed to register TemperatureSensor:", exc)
         temp_sensor = None
+        
+    try:
+        light_sensor = AnalogSensor(
+            hardware,
+            pin=26,
+            device_id="sensor.light"
+        )
+        registry.register(light_sensor)
+    except Exception as exc:
+        print("[WARN] Failed to register LightSensor:", exc)
+        light_sensor = None
 
     # 3. Register Applications
     if temp_sensor is not None:

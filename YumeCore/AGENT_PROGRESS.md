@@ -25,9 +25,3 @@
 ## 未决问题与风险追踪
 - **风险**: MicroPython 内存占用需在引入新模块后保持克制，避免在大循环内无节制创建临时 dict。
 - **应对**: 设备属性读取与事件分发避免过度封装，传感器事件采用变化阈值防刷机制。
-
----
-
-## 下一步行动
-1. 建立 Phase 0 baseline commit。
-2. 开始 Phase 1：实现 `PICO/transport.py` 和 `PC/transport.py`。
