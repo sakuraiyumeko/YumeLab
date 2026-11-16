@@ -6,7 +6,6 @@ const SFX_PRESETS_OPTIONS = [
   "tone_down",
   "stark_boot",
   "alert",
-  "victory",
   "mute",
 ];
 
