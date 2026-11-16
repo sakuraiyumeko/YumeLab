@@ -52,7 +52,8 @@ class Controller:
     def tick(self):
         """
         Runs one iteration of non-blocking scheduling:
-        - Periodic device updates
+        - Continuous high-frequency device sub-service updates (e.g. buzzer telegraph / pin state machines)
+        - Periodic device sensory sampling updates (at update_interval_ms)
         - Registered applications updates
         - Custom periodic tasks
         """
@@ -62,17 +63,26 @@ class Controller:
         now = ticks_ms()
         activity = False
 
-        # 1. Periodic device updates
+        # 1. Device updates
         if self.registry is not None:
-            if self._last_device_update is None or ticks_diff(now, self._last_device_update) >= self.update_interval_ms:
+            # Check periodic sensory update deadline
+            is_sensory_period = (
+                self._last_device_update is None
+                or ticks_diff(now, self._last_device_update) >= self.update_interval_ms
+            )
+            if is_sensory_period:
                 self._last_device_update = now
-                activity = True
-                for dev in self.registry.all():
-                    try:
+
+            for dev in self.registry.all():
+                try:
+                    # Actuators with fast background state machines (e.g. ActiveBuzzer) require high-frequency tick;
+                    # Sensory devices only update on update_interval_ms.
+                    if getattr(dev, "device_type", "") in ("active_buzzer", "passive_buzzer") or is_sensory_period:
                         dev.update()
-                    except Exception as exc:
-                        self.last_error = str(exc)
-                        self.error_count += 1
+                        activity = True
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    self.error_count += 1
 
         # 2. Application updates (e.g. debounce servicing)
         for app in self._apps:

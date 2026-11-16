@@ -69,6 +69,18 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "piano_control",
+        "description": "控制无源蜂鸣器乐谱演奏器（list/play/pause/resume/stop）。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "play", "pause", "resume", "stop"]},
+                "sheet": {"type": "string"},
+            },
+            "required": ["action"],
+        },
+    },
 ]
 
 
@@ -110,6 +122,22 @@ class WorkstationCommander:
                 auto_wave=bool(args.get("auto_wave", False)),
             )
             return {"ok": True, "tool": tool_name, "result": snap}
+        elif tool_name == "piano_control":
+            action = str(args.get("action", "")).lower()
+            if action == "list":
+                return {"ok": True, "tool": tool_name, "result": self.hub.get_piano_sheets()}
+            elif action == "play":
+                sheet = args.get("sheet")
+                if not sheet:
+                    raise ValueError("缺少乐谱名称或序号 (sheet)")
+                return {"ok": True, "tool": tool_name, "result": self.hub.play_piano_sheet(str(sheet))}
+            elif action == "pause":
+                return {"ok": True, "tool": tool_name, "result": self.hub.pause_piano()}
+            elif action == "resume":
+                return {"ok": True, "tool": tool_name, "result": self.hub.resume_piano()}
+            elif action == "stop":
+                return {"ok": True, "tool": tool_name, "result": self.hub.stop_piano()}
+            raise ValueError(f"未知 piano_control 动作: {action}")
         raise ValueError(f"未知工具: {tool_name}")
 
     def interpret_and_execute(self, command_text: str) -> Dict[str, Any]:
@@ -142,8 +170,64 @@ class WorkstationCommander:
             actions.append({"tool": "switch_mode", "args": {"mode": "standard"}, "ok": True})
             replies.append("已恢复「标准实验模式」。")
 
-        # 2. Buzzer and Audio effects
-        if any(k in lower for k in ("开机音", "启动音", "开机音乐", "stark boot", "boot sound")):
+        # 2. Buzzer, Piano Sheets and Audio effects
+        if any(k in lower for k in ("暂停演奏", "暂停音乐", "暂停播放", "pause piano", "pause music", "暂停")):
+            res = self.execute_tool("piano_control", {"action": "pause"})
+            actions.append({"tool": "piano_control", "args": {"action": "pause"}, "ok": True})
+            replies.append("已暂停当前乐谱演奏 ⏸")
+        elif any(k in lower for k in ("继续演奏", "恢复演奏", "继续播放", "resume piano", "resume music", "继续")):
+            res = self.execute_tool("piano_control", {"action": "resume"})
+            actions.append({"tool": "piano_control", "args": {"action": "resume"}, "ok": True})
+            replies.append("继续演奏当前乐谱 ▶")
+        elif any(k in lower for k in ("停止演奏", "停下音乐", "停止播放", "stop piano", "stop music", "别弹了")):
+            self.execute_tool("piano_control", {"action": "stop"})
+            actions.append({"tool": "piano_control", "args": {"action": "stop"}, "ok": True})
+            replies.append("已停止乐谱演奏 ⏹")
+        elif any(k in lower for k in ("乐谱", "曲库", "歌单", "有哪些歌", "list sheets")):
+            sheets = self.hub.get_piano_sheets()
+            names = [f"{i}. {s['title']} ({s['id']})" for i, s in enumerate(sheets, 1)]
+            actions.append({"tool": "piano_control", "args": {"action": "list"}, "ok": True})
+            replies.append("当前乐谱列表：\n" + ("\n".join(names) if names else "(空)"))
+        elif any(k in lower for k in ("演奏", "弹奏", "放歌", "放一首", "播放乐谱", "play ")) or any(
+            k in lower for k in ("sakura", "樱花", "laputa", "天空之城", "ode_to_joy", "欢乐颂", "lily", "百合")
+        ):
+            sheets = self.hub.get_piano_sheets()
+            matched = None
+            alias_map = {
+                "樱花": "sakura",
+                "天空之城": "laputa",
+                "欢乐颂": "ode_to_joy",
+                "白百合": "a single white lily",
+                "百合": "a single white lily",
+            }
+            search_target = lower
+            for zh, en in alias_map.items():
+                if zh in lower:
+                    search_target = en
+                    break
+            for s in sheets:
+                if s["id"].lower() in search_target or s["title"].lower() in search_target or search_target in s["id"].lower():
+                    matched = s["id"]
+                    break
+            if not matched:
+                m = re.search(r"(?:演奏|弹奏|播放|play)\s+([^\s]+)", text, re.IGNORECASE)
+                if m:
+                    matched = m.group(1)
+            if matched:
+                try:
+                    res = self.execute_tool("piano_control", {"action": "play", "sheet": matched})
+                    p_info = res["result"]["player"]
+                    actions.append({"tool": "piano_control", "args": {"action": "play", "sheet": matched}, "ok": True})
+                    replies.append(f"开始演奏《{p_info.get('title')}》(BPM={p_info.get('bpm')}) 🎹")
+                except Exception as exc:
+                    actions.append({"tool": "piano_control", "args": {"action": "play", "sheet": matched}, "ok": False})
+                    replies.append(f"演奏失败: {exc}")
+            elif sheets:
+                res = self.execute_tool("piano_control", {"action": "play", "sheet": sheets[0]["id"]})
+                p_info = res["result"]["player"]
+                actions.append({"tool": "piano_control", "args": {"action": "play", "sheet": sheets[0]["id"]}, "ok": True})
+                replies.append(f"开始演奏《{p_info.get('title')}》(BPM={p_info.get('bpm')}) 🎹")
+        elif any(k in lower for k in ("开机音", "启动音", "开机音乐", "stark boot", "boot sound")):
             self.execute_tool("write_device", {"device_id": "actuator.buzzer.passive", "property": "sfx", "value": "stark_boot"})
             actions.append({"tool": "write_device", "args": {"device_id": "actuator.buzzer.passive", "property": "sfx", "value": "stark_boot"}, "ok": True})
             replies.append("已播放「斯塔克战甲启动音效」🎵")
@@ -151,7 +235,17 @@ class WorkstationCommander:
             self.execute_tool("write_device", {"device_id": "actuator.buzzer.passive", "property": "sfx", "value": "alert"})
             actions.append({"tool": "write_device", "args": {"device_id": "actuator.buzzer.passive", "property": "sfx", "value": "alert"}, "ok": True})
             replies.append("无源蜂鸣器已拉响提示警报音效！")
+        elif "摩斯" in lower or "发报" in lower or "morse" in lower:
+            # 提取发报文本，如：发报 SOS / 摩斯电码 HELLO / morse CQ
+            m = re.search(r"(?:摩斯(?:密码|电码)?|发报|morse)\s*[:：]?\s*([a-zA-Z0-9\s\?\/\-\.\,\:\=\+\!]+)", text, re.IGNORECASE)
+            morse_msg = m.group(1).strip() if m else "SOS"
+            if not morse_msg:
+                morse_msg = "SOS"
+            self.execute_tool("write_device", {"device_id": "actuator.buzzer.active", "property": "morse", "value": morse_msg})
+            actions.append({"tool": "write_device", "args": {"device_id": "actuator.buzzer.active", "property": "morse", "value": morse_msg}, "ok": True})
+            replies.append(f"有源蜂鸣器正在以摩斯电码发射密报:「{morse_msg}」📻⚡")
         elif any(k in lower for k in ("静音", "别叫", "闭嘴", "mute", "stop sound")):
+            self.execute_tool("piano_control", {"action": "stop"})
             self.execute_tool("write_device", {"device_id": "actuator.buzzer.passive", "property": "sfx", "value": "mute"})
             try:
                 self.execute_tool("write_device", {"device_id": "actuator.buzzer.active", "property": "state", "value": "OFF"})

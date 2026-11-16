@@ -73,6 +73,18 @@ class TestBuzzers(unittest.TestCase):
             res = buzzer.write("beep", 2)
             self.assertEqual(res, 2)
 
+            # Morse sequence
+            res_morse = buzzer.write("morse", "SOS")
+            self.assertEqual(res_morse, "SOS")
+            self.assertEqual(buzzer.read("morse"), "SOS")
+            # State machine has started and popped first pulse (ON)
+            self.assertEqual(buzzer.read("state"), "ON")
+            # Drain queue
+            while buzzer._morse_queue:
+                buzzer._next_switch_ms = 0
+                buzzer.update()
+            self.assertEqual(buzzer.read("state"), "OFF")
+
 
 if __name__ == "__main__":
     unittest.main()

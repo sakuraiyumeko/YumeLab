@@ -1,8 +1,42 @@
 // YumeLab White Lab Workstation Controller & Integrated Terminal
+const SFX_PRESETS_OPTIONS = [
+  "click",
+  "beep",
+  "tone_up",
+  "tone_down",
+  "stark_boot",
+  "alert",
+  "victory",
+  "mute",
+];
+
+const MORSE_MAP = {
+  A: ".-", B: "-...", C: "-.-.", D: "-..", E: ".",
+  F: "..-.", G: "--.", H: "....", I: "..", J: ".---",
+  K: "-.-", L: ".-..", M: "--", N: "-.", O: "---",
+  P: ".--.", Q: "--.-", R: ".-.", S: "...", T: "-",
+  U: "..-", V: "...-", W: ".--", X: "-..-", Y: "-.--",
+  Z: "--..",
+  "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-",
+  "5": ".....", "6": "-....", "7": "--...", "8": "---..", "9": "----.",
+  "?": "..--..", "/": "-..-.", "-": "-....-", ".": ".-.-.-", ",": "--..--",
+  ":": "---...", "=": "-...-", "+": ".-.-.", "!": "-.-.--",
+};
+
+function textToMorse(text) {
+  return (text || "")
+    .toUpperCase()
+    .split("")
+    .map((ch) => (ch === " " ? "/" : MORSE_MAP[ch] || ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
 const state = {
   simEditing: false,
   isRefreshing: false,
   modesCacheKey: "",
+  sheetsCacheKey: "",
   authoritative: new Map(),
   queues: new Map(),
   globalSeq: 0,
@@ -13,7 +47,7 @@ const state = {
 function enqueueMutation(key, targetValue, mutationFn) {
   state.globalSeq += 1;
   const mySeq = state.globalSeq;
-  state.authoritative.set(key, { value: targetValue, seq: mySeq });
+  state.authoritative.set(key, { value: targetValue, seq: mySeq, timestamp: Date.now() });
 
   const prevPromise = state.queues.get(key) || Promise.resolve();
   const nextPromise = prevPromise
@@ -21,18 +55,21 @@ function enqueueMutation(key, targetValue, mutationFn) {
     .then(async () => {
       try {
         const res = await mutationFn();
-        const current = state.authoritative.get(key);
-        if (current && current.seq === mySeq) {
-          state.authoritative.delete(key);
-          if (res && res.snapshot) applyState(res.snapshot);
+        // 延时保留 authoritative 状态 2 秒，防止背景轮询返回滞后的旧快照导致按钮闪烁回弹
+        setTimeout(() => {
+          const current = state.authoritative.get(key);
+          if (current && current.seq === mySeq) {
+            state.authoritative.delete(key);
+          }
+        }, 2000);
+
+        if (res && res.snapshot) {
+          applyState(res.snapshot);
         }
       } catch (err) {
         console.error(`Mutation failed for ${key}:`, err);
-        const current = state.authoritative.get(key);
-        if (current && current.seq === mySeq) {
-          state.authoritative.delete(key);
-          refreshState();
-        }
+        state.authoritative.delete(key);
+        refreshState();
       }
     });
 
@@ -154,61 +191,17 @@ function renderModes(modes, activeMode) {
 
 /* Instrument Rack Physical Controls Setup */
 function setupInstrumentRack() {
-  // SFX Drum Pads
-  document.querySelectorAll(".pad-btn[data-sfx]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const sfx = btn.dataset.sfx;
-      btn.classList.add("playing");
-      setTimeout(() => btn.classList.remove("playing"), 200);
-      try {
-        await api("/api/devices/actuator.buzzer.passive/properties/sfx", "POST", { value: sfx });
-        appendTerminalLine(`SFX trigger: ${sfx}`, "res");
-      } catch (err) {
-        console.error("SFX error:", err);
-      }
-    });
-  });
-
-  // Passive Buzzer Mute
-  document.getElementById("buzzerMuteBtn")?.addEventListener("click", async () => {
-    try {
-      await api("/api/devices/actuator.buzzer.passive/properties/sfx", "POST", { value: "mute" });
-      appendTerminalLine("Buzzer muted.", "res");
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
-  // Piano Keys (C5 to C6)
-  document.querySelectorAll(".piano-key").forEach((key) => {
-    key.addEventListener("click", async () => {
-      const freq = Number(key.dataset.freq);
-      key.classList.add("playing");
-      setTimeout(() => key.classList.remove("playing"), 180);
-      try {
-        await api("/api/devices/actuator.buzzer.passive/properties/tone", "POST", { value: freq });
-        appendTerminalLine(`Tone played: ${freq} Hz`, "res");
-        // Auto-silence after note release
-        setTimeout(() => {
-          api("/api/devices/actuator.buzzer.passive/properties/tone", "POST", { value: 0 }).catch(() => {});
-        }, 180);
-      } catch (err) {
-        console.error("Piano tone error:", err);
-      }
-    });
-  });
-
   // Board LED Physical Rocker Switch
   const swLed = document.getElementById("swLedToggle");
   if (swLed) {
     swLed.addEventListener("click", () => {
-      const isChecked = swLed.classList.contains("checked");
-      const nextVal = isChecked ? "OFF" : "ON";
+      const current = getAuthoritativeValue("device:led:state", document.getElementById("kpiLed").textContent);
+      const nextVal = current === "ON" ? "OFF" : "ON";
       swLed.classList.toggle("checked", nextVal === "ON");
       document.getElementById("kpiLed").textContent = nextVal;
 
       enqueueMutation("device:led:state", nextVal, () =>
-        api("/api/devices/led/properties/state", "POST", { value: nextVal })
+        api("/api/devices/led/properties/state", "POST", { value: nextVal, sync_poll: true })
       );
     });
   }
@@ -216,11 +209,54 @@ function setupInstrumentRack() {
   // Active Buzzer Alarm Burst
   document.getElementById("activeBuzzerBeepBtn")?.addEventListener("click", async () => {
     try {
-      await api("/api/devices/actuator.buzzer.active/properties/beep", "POST", { value: 2 });
+      await api("/api/devices/actuator.buzzer.active/properties/beep", "POST", { value: 2, sync_poll: false });
       appendTerminalLine("Active buzzer alarm: 2 beeps triggered.", "res");
     } catch (err) {
       console.error(err);
     }
+  });
+
+  // Active Buzzer Morse Telegraph
+  const morseInput = document.getElementById("morseInput");
+  const morseSendBtn = document.getElementById("morseSendBtn");
+  const morsePreview = document.getElementById("morsePreviewText");
+
+  const updateMorsePreview = () => {
+    if (morseInput && morsePreview) {
+      morsePreview.textContent = textToMorse(morseInput.value) || "(无编码)";
+    }
+  };
+  morseInput?.addEventListener("input", updateMorsePreview);
+  updateMorsePreview();
+
+  const sendMorse = async (text) => {
+    const raw = (text || "").trim().toUpperCase();
+    if (!raw) return;
+    try {
+      await api("/api/devices/actuator.buzzer.active/properties/morse", "POST", { value: raw, sync_poll: false });
+      appendTerminalLine(`Morse transmitting: ${raw} [${textToMorse(raw)}]`, "res");
+    } catch (err) {
+      appendTerminalLine(`Morse error: ${err.message}`, "err");
+    }
+  };
+
+  morseSendBtn?.addEventListener("click", () => sendMorse(morseInput?.value));
+  morseInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendMorse(morseInput.value);
+    }
+  });
+
+  document.querySelectorAll(".chip-btn.mini-chip[data-morse]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const code = chip.dataset.morse;
+      if (morseInput) {
+        morseInput.value = code;
+        updateMorsePreview();
+      }
+      sendMorse(code);
+    });
   });
 
   // Desk Lamp PWM Fader
@@ -235,7 +271,7 @@ function setupInstrumentRack() {
       // Temporarily pause auto ambient_light so manual duty stays
       api("/api/apps/ambient_light/properties/enabled", "POST", { value: false }).catch(() => {});
       enqueueMutation("device:actuator.desk_lamp:duty", val, () =>
-        api("/api/devices/actuator.desk_lamp/properties/duty", "POST", { value: val })
+        api("/api/devices/actuator.desk_lamp/properties/duty", "POST", { value: val, sync_poll: false })
       );
     });
   }
@@ -254,6 +290,97 @@ function setupInstrumentRack() {
       );
     });
   }
+
+  // Buzzer Sheet Player Controls
+  const playBtn = document.getElementById("playerPlayBtn");
+  const pauseBtn = document.getElementById("playerPauseBtn");
+  const stopBtn = document.getElementById("playerStopBtn");
+  const sheetSel = document.getElementById("sheetSelect");
+
+  playBtn?.addEventListener("click", async () => {
+    const sheet = sheetSel?.value;
+    if (!sheet) return;
+    try {
+      const res = await api("/api/piano/play", "POST", { sheet });
+      if (res.snapshot) applyState(res.snapshot);
+      appendTerminalLine(`Piano play: ${sheet}`, "res");
+    } catch (err) {
+      appendTerminalLine(`Piano error: ${err.message}`, "err");
+    }
+  });
+
+  pauseBtn?.addEventListener("click", async () => {
+    const badge = document.getElementById("playerStateBadge");
+    const isPaused = badge?.textContent === "PAUSED";
+    try {
+      const res = await api(isPaused ? "/api/piano/resume" : "/api/piano/pause", "POST");
+      if (res.snapshot) applyState(res.snapshot);
+    } catch (err) {
+      appendTerminalLine(`Piano error: ${err.message}`, "err");
+    }
+  });
+
+  stopBtn?.addEventListener("click", async () => {
+    try {
+      const res = await api("/api/piano/stop", "POST");
+      if (res.snapshot) applyState(res.snapshot);
+    } catch (err) {
+      appendTerminalLine(`Piano error: ${err.message}`, "err");
+    }
+  });
+}
+
+function renderSheets(sheets) {
+  const select = document.getElementById("sheetSelect");
+  if (!select) return;
+  const key = (sheets || []).map((s) => s.id).join("|");
+  if (state.sheetsCacheKey === key) return;
+  state.sheetsCacheKey = key;
+
+  const prev = select.value;
+  select.innerHTML = "";
+  if (!sheets || sheets.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(暂无可用乐谱)";
+    select.appendChild(opt);
+    return;
+  }
+  sheets.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.title} (${s.bpm} BPM · ${s.notes}音符)`;
+    select.appendChild(opt);
+  });
+  if (prev && sheets.some((s) => s.id === prev)) {
+    select.value = prev;
+  }
+}
+
+function renderPlayerStatus(player) {
+  if (!player) return;
+  const badge = document.getElementById("playerStateBadge");
+  const titleEl = document.getElementById("playerNowTitle");
+  const progEl = document.getElementById("playerProgressText");
+  const barEl = document.getElementById("playerProgressBar");
+  const pauseBtn = document.getElementById("playerPauseBtn");
+
+  const st = player.state || "IDLE";
+  if (badge) {
+    badge.textContent = st;
+    badge.classList.toggle("playing", st === "PLAYING");
+    badge.classList.toggle("paused", st === "PAUSED");
+  }
+  if (pauseBtn) {
+    pauseBtn.textContent = st === "PAUSED" ? "▶ 继续" : "⏸ 暂停";
+  }
+  if (titleEl) {
+    titleEl.textContent = player.title ? `${player.title} (BPM=${player.bpm || 120})` : "待机中 · 请选择乐谱";
+  }
+  const cur = Number(player.progress || 0);
+  const tot = Number(player.total || 0);
+  if (progEl) progEl.textContent = `${cur} / ${tot}`;
+  if (barEl) barEl.style.width = tot > 0 ? `${Math.round((cur / tot) * 100)}%` : "0%";
 }
 
 /* Micro Entities Updates */
@@ -279,6 +406,11 @@ function updateDevices(devices) {
 
     const propsContainer = card.querySelector(".entity-props");
     Object.entries(dev.properties || {}).forEach(([prop, meta]) => {
+      // 对无源蜂鸣器隐藏底层的 frequency，避免与应用层 tone 重复混淆
+      if (dev.id === "actuator.buzzer.passive" && prop === "frequency") {
+        return;
+      }
+
       const rawVal = dev.values?.[prop];
       const lockKey = `device:${dev.id}:${prop}`;
       const effectiveVal = getAuthoritativeValue(lockKey, rawVal);
@@ -298,29 +430,83 @@ function updateDevices(devices) {
           const ctrl = document.createElement("div");
           ctrl.style.display = "flex";
           ctrl.style.gap = "4px";
+          ctrl.style.alignItems = "center";
 
-          const inp = document.createElement("input");
-          inp.type = "number";
-          inp.style.cssText = "width:60px; padding:2px 4px; font-size:0.75rem; border:1px solid var(--border); border-radius:4px;";
+          const propType = (meta.type || "").toLowerCase();
+          const isStringProp = propType === "str" || propType === "string" || prop === "sfx" || prop === "state";
+
+          let inp;
+          if (prop === "sfx") {
+            inp = document.createElement("select");
+            inp.style.cssText = "width:98px; padding:2px 4px; font-size:0.75rem; border:1px solid var(--border); border-radius:4px; background:#fff;";
+            SFX_PRESETS_OPTIONS.forEach((preset) => {
+              const opt = document.createElement("option");
+              opt.value = preset;
+              opt.textContent = preset;
+              inp.appendChild(opt);
+            });
+            if (effectiveVal && SFX_PRESETS_OPTIONS.includes(String(effectiveVal))) {
+              inp.value = String(effectiveVal);
+            }
+          } else {
+            inp = document.createElement("input");
+            inp.type = isStringProp ? "text" : "number";
+            inp.style.cssText = `${isStringProp ? "width:92px;" : "width:60px;"} padding:2px 4px; font-size:0.75rem; border:1px solid var(--border); border-radius:4px;`;
+            if (isStringProp) {
+              inp.placeholder = "文本值";
+            } else if (prop === "tone") {
+              inp.placeholder = "Hz";
+            }
+          }
+
           const btn = document.createElement("button");
           btn.className = "chip-btn";
           btn.textContent = "写";
           btn.style.padding = "2px 6px";
           btn.onclick = () => {
-            const targetVal = Number(inp.value);
+            let targetVal;
+            if (inp.tagName === "SELECT" || isStringProp) {
+              targetVal = String(inp.value).trim();
+              if (!targetVal) return;
+            } else {
+              if (inp.value === "") return;
+              targetVal = Number(inp.value);
+              if (Number.isNaN(targetVal)) return;
+            }
             enqueueMutation(lockKey, targetVal, () =>
-              api(`/api/devices/${encodeURIComponent(dev.id)}/properties/${prop}`, "POST", { value: targetVal })
+              api(`/api/devices/${encodeURIComponent(dev.id)}/properties/${prop}`, "POST", { value: targetVal, sync_poll: true })
             );
           };
           ctrl.appendChild(inp);
           ctrl.appendChild(btn);
+
+          // 为 tone 额外提供一键静音快捷键
+          if (dev.id === "actuator.buzzer.passive" && prop === "tone") {
+            const muteBtn = document.createElement("button");
+            muteBtn.className = "chip-btn";
+            muteBtn.textContent = "静音";
+            muteBtn.style.padding = "2px 6px";
+            muteBtn.onclick = () => {
+              enqueueMutation(lockKey, 0, () =>
+                api(`/api/devices/${encodeURIComponent(dev.id)}/properties/tone`, "POST", { value: 0, sync_poll: false })
+              );
+            };
+            ctrl.appendChild(muteBtn);
+          }
+
           row.appendChild(ctrl);
         }
         propsContainer.appendChild(row);
       }
 
       const labelEl = row.querySelector(".prop-label");
-      if (labelEl) labelEl.textContent = `${prop}: ${effectiveVal}${unit}`;
+      if (labelEl) {
+        if (dev.id === "actuator.buzzer.passive" && prop === "tone") {
+          labelEl.textContent = `tone (音调): ${effectiveVal}${unit}`;
+        } else {
+          labelEl.textContent = `${prop}: ${effectiveVal}${unit}`;
+        }
+      }
     });
   });
 }
@@ -414,7 +600,7 @@ function renderEvents(events) {
 }
 
 /* Master State Application */
-function applyState(snap, history = null, events = null, modes = null) {
+function applyState(snap, history = null, events = null, modes = null, sheets = null) {
   const conn = snap.connection || {};
   const tel = snap.telemetry || {};
 
@@ -463,6 +649,8 @@ function applyState(snap, history = null, events = null, modes = null) {
 
   if (history) renderChart(history);
   if (modes) renderModes(modes, activeMode);
+  if (sheets) renderSheets(sheets);
+  renderPlayerStatus(snap.player);
   updateDevices(snap.devices);
   updateApps(snap.apps);
   if (events) renderEvents(events);
@@ -474,7 +662,7 @@ async function refreshState() {
 
   try {
     const data = await api("/api/state");
-    applyState(data.snapshot, data.history, data.events, data.modes);
+    applyState(data.snapshot, data.history, data.events, data.modes, data.sheets);
   } catch (err) {
     console.error("Failed to refresh state:", err);
   } finally {
@@ -557,7 +745,7 @@ function setupTerminalDrawer() {
     } else if (e.key === "Tab") {
       e.preventDefault();
       const current = input.value.trim();
-      const candidates = ["help", "ping", "info", "devices", "device", "apps", "app", "auto", "ls", "cd", "pwd", "cat", "put", "get", "mkdir", "rm", "mv", "reboot", "send", "clear"];
+      const candidates = ["help", "ping", "info", "devices", "device", "apps", "app", "auto", "piano", "ls", "cd", "pwd", "cat", "put", "get", "mkdir", "rm", "mv", "reboot", "send", "clear"];
       const match = candidates.find((c) => c.startsWith(current.toLowerCase()));
       if (match) input.value = match + " ";
     } else if (e.key === "ArrowUp") {
@@ -600,4 +788,4 @@ setupTerminalDrawer();
 
 appendChat("assistant", "米露莉安已就位～✨ 纯白实验室控制台与拟物乐器台已全部装载完成！点击琴键或音效垫，听听桌上的蜂鸣器唱歌吧～");
 refreshState();
-setInterval(refreshState, 500);
+setInterval(refreshState, 1000);

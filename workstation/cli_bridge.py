@@ -72,6 +72,7 @@ class WebCLIBridge:
                     "  app read <name> <prop>      Read application property\n"
                     "  app write <name> <p> <v>    Write application property\n"
                     "  auto <on|off|set <temp>>    Quick thermal auto control\n"
+                    "  piano <ls|play <name>|pause|resume|stop>  Buzzer sheet player\n"
                     "  ls [path]                   List remote directory\n"
                     "  cd <path>                   Change remote directory\n"
                     "  pwd                         Show current remote directory\n"
@@ -184,6 +185,34 @@ class WebCLIBridge:
                     res = self.hub.write_app("thermal", "threshold", thresh)
                     return {"ok": True, "output": f"Thermal threshold set to: {thresh}°C", "cwd": self.cwd, "snapshot": res.get("snapshot")}
                 return {"ok": False, "output": f"Unknown auto action: {subcmd}", "cwd": self.cwd}
+
+            elif cmd == "piano":
+                if not args:
+                    st = self.hub.get_piano_status()
+                    return {"ok": True, "output": json.dumps(st, ensure_ascii=False, indent=2), "cwd": self.cwd}
+                sub = args[0].lower()
+                if sub in ("ls", "list"):
+                    sheets = self.hub.get_piano_sheets()
+                    if not sheets:
+                        return {"ok": True, "output": "(no sheets found)", "cwd": self.cwd}
+                    lines = [f"{i}. {s['id']} — {s['title']} (BPM={s['bpm']}, {s['notes']} notes)" for i, s in enumerate(sheets, 1)]
+                    return {"ok": True, "output": "\n".join(lines), "cwd": self.cwd}
+                elif sub == "play":
+                    if len(args) < 2:
+                        return {"ok": False, "output": "Usage: piano play <index|name>", "cwd": self.cwd}
+                    res = self.hub.play_piano_sheet(" ".join(args[1:]))
+                    p = res["player"]
+                    return {"ok": True, "output": f"Playing: {p.get('title')} (BPM={p.get('bpm')})", "cwd": self.cwd, "snapshot": res.get("snapshot")}
+                elif sub == "pause":
+                    res = self.hub.pause_piano()
+                    return {"ok": True, "output": f"Player state: {res['player'].get('state')}", "cwd": self.cwd, "snapshot": res.get("snapshot")}
+                elif sub == "resume":
+                    res = self.hub.resume_piano()
+                    return {"ok": True, "output": f"Player state: {res['player'].get('state')}", "cwd": self.cwd, "snapshot": res.get("snapshot")}
+                elif sub == "stop":
+                    res = self.hub.stop_piano()
+                    return {"ok": True, "output": f"Player state: {res['player'].get('state')}", "cwd": self.cwd, "snapshot": res.get("snapshot")}
+                return {"ok": False, "output": "Usage: piano <ls|play <name>|pause|resume|stop>", "cwd": self.cwd}
 
             # Remote Filesystem Operations
             elif cmd == "ls":

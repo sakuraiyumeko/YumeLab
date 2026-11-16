@@ -23,6 +23,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 class DeviceWriteRequest(BaseModel):
     value: Any
+    sync_poll: bool = True
 
 
 class AppWriteRequest(BaseModel):
@@ -46,6 +47,10 @@ class CommandRequest(BaseModel):
 class ToolExecuteRequest(BaseModel):
     tool: str
     arguments: Dict[str, Any] = {}
+
+
+class PianoPlayRequest(BaseModel):
+    sheet: str
 
 
 def create_app(
@@ -97,6 +102,7 @@ def create_app(
             "history": active_hub.get_history(limit=60),
             "events": active_hub.get_events(limit=25),
             "modes": active_hub.get_modes(),
+            "sheets": active_hub.get_piano_sheets(),
         }
 
     @app.post("/api/poll")
@@ -109,7 +115,7 @@ def create_app(
     @app.post("/api/devices/{device_id}/properties/{prop_name}")
     def write_device_prop(device_id: str, prop_name: str, body: DeviceWriteRequest):
         try:
-            return active_hub.write_device(device_id, prop_name, body.value)
+            return active_hub.write_device(device_id, prop_name, body.value, sync_poll=body.sync_poll)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:
@@ -164,5 +170,44 @@ def create_app(
     @app.post("/api/cli")
     def terminal_command(body: CommandRequest):
         return cli_bridge.execute_line(body.text)
+
+    @app.get("/api/piano/sheets")
+    def list_piano_sheets():
+        return {
+            "sheets": active_hub.get_piano_sheets(),
+            "player": active_hub.get_piano_status(),
+        }
+
+    @app.post("/api/piano/play")
+    def play_piano_sheet(body: PianoPlayRequest):
+        try:
+            return active_hub.play_piano_sheet(body.sheet)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.post("/api/piano/pause")
+    def pause_piano():
+        try:
+            return active_hub.pause_piano()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.post("/api/piano/resume")
+    def resume_piano():
+        try:
+            return active_hub.resume_piano()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.post("/api/piano/stop")
+    def stop_piano():
+        try:
+            return active_hub.stop_piano()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     return app

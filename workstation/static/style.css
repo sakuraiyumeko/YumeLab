@@ -335,7 +335,15 @@ body {
   align-items: center;
 }
 
-/* Sound Effect Drum Pads */
+/* Entity Cards Horizontal Responsive Grid */
+.entity-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* Sound Effect Drum Pads (Deprecated) */
 .sfx-pad-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -416,6 +424,120 @@ body {
   background: #bae6fd;
   transform: translateY(2px);
   border-bottom-width: 1px;
+}
+
+/* Sheet Music Player */
+.piano-player-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.piano-player-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.sheet-select {
+  flex: 1;
+  min-width: 140px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 600;
+  outline: none;
+}
+.sheet-select:focus {
+  border-color: var(--primary);
+}
+.chip-btn.primary-chip {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+.chip-btn.primary-chip:hover {
+  background: var(--primary-hover);
+  color: #ffffff;
+}
+.chip-btn.mini-chip {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+}
+.player-state-badge {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: var(--text-sub);
+  font-weight: 800;
+}
+.player-state-badge.playing {
+  background: #dcfce7;
+  color: var(--accent-emerald);
+}
+.player-state-badge.paused {
+  background: #fef3c7;
+  color: var(--accent-amber);
+}
+.player-status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* Morse Telegraph Module */
+.morse-telegraph-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.morse-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.morse-input {
+  flex: 1;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.morse-input:focus {
+  border-color: var(--primary);
+}
+.morse-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.morse-preview {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 2px;
 }
 
 /* Physical Rocker & Toggle Switches */

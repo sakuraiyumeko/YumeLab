@@ -65,6 +65,14 @@ class StateStore:
                 "led_state": None,
                 "desk_lamp_duty": None,
             },
+            "player": {
+                "state": "IDLE",
+                "title": None,
+                "sheet": None,
+                "bpm": 120,
+                "progress": 0,
+                "total": 0,
+            },
         }
         self._load_persisted_config()
 
@@ -90,6 +98,7 @@ class StateStore:
         apps: Optional[Dict[str, Any]] = None,
         telemetry: Optional[Dict[str, Any]] = None,
         active_mode: Optional[str] = None,
+        player: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             self._snapshot["timestamp"] = utc_iso_now()
@@ -109,6 +118,8 @@ class StateStore:
             if active_mode is not None:
                 self._snapshot["workstation"]["active_mode"] = active_mode
                 self.save_config({"active_mode": active_mode})
+            if player is not None:
+                self._snapshot["player"] = dict(player)
 
             self._persist_snapshot_unlocked()
             return self.get_snapshot()

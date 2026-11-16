@@ -19,6 +19,7 @@ if str(PC_DIR) not in sys.path:
     sys.path.insert(0, str(PC_DIR))
 
 from host import YumeCore  # noqa: E402
+from buzzer_piano import BuzzerPlayer  # noqa: E402
 from workstation.sim_pico import SimulatedPicoNode, SimulatedTransport  # noqa: E402
 from workstation.state_store import StateStore  # noqa: E402
 
@@ -87,6 +88,7 @@ class WorkstationHub:
         self.sim_node: Optional[SimulatedPicoNode] = sim_node
         self.core: Optional[YumeCore] = None
         self._node_info: Optional[str] = None
+        self.player: Optional[BuzzerPlayer] = None
 
     def connect(self) -> Dict[str, Any]:
         with self._io_lock:
@@ -111,6 +113,15 @@ class WorkstationHub:
                 port_label = self.port
 
             self._node_info = self.core.info()
+            if self.player is not None:
+                self.player.stop()
+            self.player = BuzzerPlayer(
+                core=self.core,
+                io_lock=self._io_lock,
+                sheets_dir=PC_DIR / "sheets",
+                on_state_change=self._on_player_state_change,
+                log_fn=lambda _msg: None,
+            )
             self.state_store.update_snapshot(
                 connection={
                     "connected": True,
@@ -118,7 +129,8 @@ class WorkstationHub:
                     "port": port_label,
                     "node_info": self._node_info,
                     "last_error": None,
-                }
+                },
+                player=self.player.status(),
             )
             self.state_store.record_event(
                 source="hub",
@@ -146,6 +158,12 @@ class WorkstationHub:
         if self._poll_thread is not None:
             self._poll_thread.join(timeout=2.5)
             self._poll_thread = None
+        if self.player is not None:
+            try:
+                self.player.stop()
+            except Exception:
+                pass
+            self.player = None
         with self._io_lock:
             if self.core is not None:
                 try:
@@ -158,6 +176,10 @@ class WorkstationHub:
     def _poll_loop(self) -> None:
         while not self._stop_event.wait(self.poll_interval):
             try:
+                if self.player is not None and self.player.state.name == "PLAYING":
+                    # Avoid stalling serial I/O and drifting note BPM during active buzzer playback
+                    self.state_store.update_snapshot(player=self.player.status())
+                    continue
                 self.poll_once()
             except Exception as exc:
                 self.state_store.update_snapshot(
@@ -208,9 +230,26 @@ class WorkstationHub:
                 devices=devices_map,
                 apps=apps_map,
                 telemetry=telemetry,
+                player=self.player.status() if self.player is not None else None,
             )
 
-    def write_device(self, device_id: str, property_name: str, value: Any) -> Dict[str, Any]:
+    def write_device(self, device_id: str, property_name: str, value: Any, sync_poll: bool = True) -> Dict[str, Any]:
+        if device_id == "actuator.buzzer.passive" and property_name == "sfx" and self.player is not None:
+            sfx_name = str(value).lower().strip()
+            self.player.play_sfx(sfx_name)
+            self.state_store.record_event(
+                source="device",
+                kind="write",
+                message=f"设备 {device_id}.sfx -> {sfx_name}",
+                detail={"device_id": device_id, "property": "sfx", "value": sfx_name},
+            )
+            current_snap = self.state_store.get_snapshot()
+            devs = current_snap.get("devices", {})
+            if device_id in devs:
+                devs[device_id].setdefault("values", {})[property_name] = sfx_name
+            snapshot = self.state_store.update_snapshot(devices=devs, player=self.player.status())
+            return {"device": device_id, "property": property_name, "value": sfx_name, "snapshot": snapshot}
+
         with self._io_lock:
             if self.core is None:
                 raise RuntimeError("Hub is not connected")
@@ -221,7 +260,20 @@ class WorkstationHub:
                 message=f"设备 {device_id}.{property_name} -> {new_val}",
                 detail={"device_id": device_id, "property": property_name, "value": new_val},
             )
-            snapshot = self.poll_once()
+            # 立即更新 snapshot 中该设备的属性，避免 sync_poll=False 时被旧快照闪烁覆盖
+            current_snap = self.state_store.get_snapshot()
+            devs = current_snap.get("devices", {})
+            if device_id in devs:
+                devs[device_id].setdefault("values", {})[property_name] = new_val
+            telem = {}
+            if device_id == "led" and property_name == "state":
+                telem["led_state"] = new_val
+            elif device_id == "actuator.desk_lamp" and property_name == "duty":
+                telem["desk_lamp_duty"] = new_val
+
+            snapshot = self.state_store.update_snapshot(devices=devs, telemetry=telem if telem else None)
+            if sync_poll:
+                snapshot = self.poll_once()
             return {"device": device_id, "property": property_name, "value": new_val, "snapshot": snapshot}
 
     def write_app(self, app_name: str, property_name: str, value: Any) -> Dict[str, Any]:
@@ -235,7 +287,11 @@ class WorkstationHub:
                 message=f"应用 {app_name}.{property_name} -> {new_val}",
                 detail={"app": app_name, "property": property_name, "value": new_val},
             )
-            snapshot = self.poll_once()
+            current_snap = self.state_store.get_snapshot()
+            apps = current_snap.get("apps", {})
+            if app_name in apps:
+                apps[app_name].setdefault("values", {})[property_name] = new_val
+            snapshot = self.state_store.update_snapshot(apps=apps)
             return {"app": app_name, "property": property_name, "value": new_val, "snapshot": snapshot}
 
     def apply_mode(self, mode_name: str) -> Dict[str, Any]:
@@ -299,3 +355,51 @@ class WorkstationHub:
 
     def get_modes(self) -> Dict[str, Dict[str, Any]]:
         return SCENE_MODES
+
+    def _on_player_state_change(self, status: Dict[str, Any]) -> None:
+        self.state_store.update_snapshot(player=status)
+
+    def get_piano_sheets(self) -> List[Dict[str, Any]]:
+        if self.player is None:
+            return []
+        return self.player.list_sheets()
+
+    def get_piano_status(self) -> Dict[str, Any]:
+        if self.player is None:
+            return {"state": "IDLE", "title": None, "sheet": None, "bpm": 120, "progress": 0, "total": 0}
+        return self.player.status()
+
+    def play_piano_sheet(self, sheet_ref: str) -> Dict[str, Any]:
+        if self.core is None or self.player is None:
+            raise RuntimeError("Hub is not connected")
+        path = self.player.resolve_sheet(sheet_ref)
+        status = self.player.play(path)
+        self.state_store.record_event(
+            source="piano",
+            kind="play",
+            message=f"开始演奏乐谱: {status.get('title')} (BPM={status.get('bpm')})",
+            detail=status,
+        )
+        # Note: Do not call poll_once() here; immediate full serial poll delays first note output
+        return {"ok": True, "player": status, "snapshot": self.state_store.update_snapshot(player=status)}
+
+    def pause_piano(self) -> Dict[str, Any]:
+        if self.player is None:
+            raise RuntimeError("Hub is not connected")
+        status = self.player.pause()
+        self.state_store.record_event(source="piano", kind="pause", message="蜂鸣器演奏已暂停", detail=status)
+        return {"ok": True, "player": status, "snapshot": self.state_store.update_snapshot(player=status)}
+
+    def resume_piano(self) -> Dict[str, Any]:
+        if self.player is None:
+            raise RuntimeError("Hub is not connected")
+        status = self.player.resume()
+        self.state_store.record_event(source="piano", kind="resume", message="蜂鸣器继续演奏", detail=status)
+        return {"ok": True, "player": status, "snapshot": self.state_store.update_snapshot(player=status)}
+
+    def stop_piano(self) -> Dict[str, Any]:
+        if self.player is None:
+            raise RuntimeError("Hub is not connected")
+        status = self.player.stop()
+        self.state_store.record_event(source="piano", kind="stop", message="蜂鸣器演奏已停止", detail=status)
+        return {"ok": True, "player": status, "snapshot": self.state_store.update_snapshot(player=status)}

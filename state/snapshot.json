@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-16T11:05:02+00:00",
+  "timestamp": "2026-11-16T16:02:23+00:00",
   "connection": {
     "connected": true,
     "mode": "serial",
@@ -63,9 +63,9 @@
       "id": "actuator.buzzer.passive",
       "type": "passive_buzzer",
       "values": {
-        "sfx": "beep",
+        "sfx": "stark_boot",
         "duty": 0.0,
-        "frequency": 2400,
+        "frequency": 1047,
         "tone": 0
       }
     },
@@ -103,13 +103,18 @@
       "id": "sensor.light",
       "type": "light_sensor",
       "values": {
-        "brightness": 62.8,
-        "raw": 41546,
-        "voltage": 2.107
+        "brightness": 70.5,
+        "raw": 46507,
+        "voltage": 2.342
       }
     },
     "actuator.buzzer.active": {
       "properties": {
+        "morse": {
+          "readable": true,
+          "writable": true,
+          "type": "str"
+        },
         "state": {
           "writable": true,
           "readable": true
@@ -123,6 +128,7 @@
       "id": "actuator.buzzer.active",
       "type": "active_buzzer",
       "values": {
+        "morse": "73",
         "state": "OFF",
         "beep": 2
       }
@@ -248,22 +254,30 @@
         }
       },
       "values": {
-        "enabled": false,
+        "enabled": true,
         "dark_threshold": 35.0,
         "hysteresis": 5.0,
         "target_brightness": 60.0,
         "state": "IDLE",
         "debounce_ms": 200,
-        "last_brightness": 63.4,
+        "last_brightness": 70.3,
         "output_level": 0.0
       }
     }
   },
   "telemetry": {
     "temperature_c": 20.49,
-    "brightness_pct": 62.8,
+    "brightness_pct": 70.5,
     "led_state": "OFF",
     "desk_lamp_duty": 0.0
+  },
+  "player": {
+    "state": "IDLE",
+    "title": "SFX_victory",
+    "sheet": "SFX_victory",
+    "bpm": 120,
+    "progress": 0,
+    "total": 4
   },
   "history_count": 120
 }

@@ -111,53 +111,33 @@
           </div>
 
           <div class="instrument-rack">
-            <!-- Audio Section: Passive Buzzer Pads and Piano Keys -->
+            <!-- Audio Section: Passive Buzzer Sheet Player -->
             <div class="rack-section">
-              <div class="rack-title">
-                <span>PASSIVE BUZZER 琴键与 SFX 鼓垫 (GPIO 16)</span>
-                <button class="chip-btn" id="buzzerMuteBtn" style="padding: 2px 7px;">MUTE</button>
-              </div>
-
-              <!-- Quick Drum Pads -->
-              <div class="sfx-pad-grid">
-                <button class="pad-btn" data-sfx="stark_boot">
-                  <span>⚡ 启动音</span>
-                  <small style="font-size: 0.65rem; color: var(--text-muted);">STARK BOOT</small>
-                </button>
-                <button class="pad-btn" data-sfx="beep">
-                  <span>🔔 提示音</span>
-                  <small style="font-size: 0.65rem; color: var(--text-muted);">BEEP</small>
-                </button>
-                <button class="pad-btn" data-sfx="victory">
-                  <span>🏆 胜利音</span>
-                  <small style="font-size: 0.65rem; color: var(--text-muted);">VICTORY</small>
-                </button>
-                <button class="pad-btn" data-sfx="tone_up">
-                  <span>📈 上扬音</span>
-                  <small style="font-size: 0.65rem; color: var(--text-muted);">TONE UP</small>
-                </button>
-              </div>
-
-              <!-- 8-Key Micro Piano -->
-              <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px;">
-                八度微型琴键 (C5 - C6)
-              </div>
-              <div class="piano-keys-wrapper" id="pianoKeyboard">
-                <div class="piano-key" data-freq="523"><span>C5</span><small>Do</small></div>
-                <div class="piano-key" data-freq="587"><span>D5</span><small>Re</small></div>
-                <div class="piano-key" data-freq="659"><span>E5</span><small>Mi</small></div>
-                <div class="piano-key" data-freq="698"><span>F5</span><small>Fa</small></div>
-                <div class="piano-key" data-freq="784"><span>G5</span><small>So</small></div>
-                <div class="piano-key" data-freq="880"><span>A5</span><small>La</small></div>
-                <div class="piano-key" data-freq="988"><span>B5</span><small>Si</small></div>
-                <div class="piano-key" data-freq="1047"><span>C6</span><small>Do*</small></div>
+              <div class="piano-player-box" style="margin-top: 0; padding: 0; background: transparent; border: none;">
+                <div class="rack-title" style="margin-bottom: 10px;">
+                  <span>SHEET PLAYER 乐谱演奏台 (GPIO 16)</span>
+                  <span id="playerStateBadge" class="player-state-badge">IDLE</span>
+                </div>
+                <div class="piano-player-controls">
+                  <select id="sheetSelect" class="sheet-select"></select>
+                  <button class="chip-btn primary-chip" id="playerPlayBtn">▶ 演奏</button>
+                  <button class="chip-btn" id="playerPauseBtn">⏸ 暂停</button>
+                  <button class="chip-btn" id="playerStopBtn">⏹ 停止</button>
+                </div>
+                <div class="player-status-row">
+                  <span id="playerNowTitle">未选择乐谱</span>
+                  <span id="playerProgressText">0 / 0</span>
+                </div>
+                <div class="kpi-gauge" style="margin-top: 8px;">
+                  <div id="playerProgressBar"></div>
+                </div>
               </div>
             </div>
 
             <!-- Physical Toggle Switches & Alarm Module -->
             <div class="rack-section">
               <div class="rack-title">
-                <span>PHYSICAL SWITCHES 实体拨片与警报模块</span>
+                <span>PHYSICAL SWITCHES & TELEGRAPH 实体开关与摩斯发报台</span>
               </div>
               <div class="toggle-shelf">
                 <!-- Board LED Toggle -->
@@ -172,12 +152,27 @@
                 <!-- Active Buzzer Alarm Burst -->
                 <div class="switch-module">
                   <div class="switch-info">
-                    <div class="sw-name">有源警报器 (GP17)</div>
+                    <div class="sw-name">有源警报 (GP17)</div>
                     <div class="sw-sub">TMB12A03 + 220Ω</div>
                   </div>
                   <button class="pad-btn alarm-pad" id="activeBuzzerBeepBtn" style="padding: 6px 12px; font-size: 0.75rem;">
                     🚨 鸣响警报
                   </button>
+                </div>
+              </div>
+
+              <!-- Morse Telegraph Module -->
+              <div class="morse-telegraph-box">
+                <div class="morse-input-row">
+                  <input type="text" id="morseInput" class="morse-input" placeholder="输入英文/数字，如 SOS / HELLO..." value="SOS" maxlength="40" autocomplete="off" />
+                  <button class="chip-btn primary-chip" id="morseSendBtn">📻 发报</button>
+                </div>
+                <div class="morse-quick-chips">
+                  <button class="chip-btn mini-chip" data-morse="SOS">SOS</button>
+                  <button class="chip-btn mini-chip" data-morse="CQ CQ">CQ (呼叫)</button>
+                  <button class="chip-btn mini-chip" data-morse="73">73 (致敬)</button>
+                  <button class="chip-btn mini-chip" data-morse="HELLO">HELLO</button>
+                  <span id="morsePreviewText" class="morse-preview">··· --- ···</span>
                 </div>
               </div>
             </div>
@@ -212,8 +207,8 @@
           <div class="panel-head">
             <span class="title-badge"><span class="badge-dot"></span>05 // 设备与自动化微调 DEVICES & APPS</span>
           </div>
-          <div id="devicesContainer" class="col-stack" style="gap: 10px;"></div>
-          <div id="appsContainer" class="col-stack" style="gap: 10px; margin-top: 10px;"></div>
+          <div class="entity-cards-grid" id="devicesContainer"></div>
+          <div class="entity-cards-grid" id="appsContainer" style="margin-top: 14px;"></div>
         </div>
       </section>
 

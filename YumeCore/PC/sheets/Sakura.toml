@@ -1,0 +1,33 @@
+title = "Sakura Sakura"
+bpm = 100
+gate = 0.98
+
+    melody = [
+        # Sakura, sakura
+        "A4:4", "A4:4", "B4:2",
+        "A4:4", "A4:4", "B4:2",
+
+        # Yayoi no sora wa
+        "A4:4", "B4:4", "C5:4", "B4:4",
+        "A4:4", "B4:8", "A4:8", "F4:2",
+
+        # Mi-watasu kagiri
+        "E4:4", "C4:4", "E4:4", "F4:4",
+        "E4:4", "E4:8", "C4:8", "B3:2",
+
+        # Kasumi ka kumo ka
+        "A4:4", "B4:4", "C5:4", "B4:4",
+        "A4:4", "B4:8", "A4:8", "F4:2",
+
+        # Nioi zo izuru
+        "E4:4", "C4:4", "E4:4", "F4:4",
+        "E4:4", "E4:8", "C4:8", "B3:2",
+
+        # Izaya izaya
+        "A4:4", "A4:4", "B4:2",
+        "A4:4", "A4:4", "B4:2",
+
+        # Mi ni yukan
+        "E4:4", "F4:4", "B4:8", "A4:8",
+        "F4:4", "E4:2."
+    ]
