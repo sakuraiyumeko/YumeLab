@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YUMELAB // WHITE LAB WORKSTATION</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="lab-grid-pattern"></div>
+  <div class="lab-shell">
+    <!-- Top Modern Light Header -->
+    <header class="lab-header panel">
+      <div class="brand">
+        <div class="lab-core-orb"></div>
+        <div>
+          <div class="brand-title">YUMELAB <span class="accent">WHITE LAB</span> WORKSTATION</div>
+          <div class="brand-sub" id="nodeInfo">正在探测物理硬件节点...</div>
+        </div>
+      </div>
+
+      <div class="header-status-group">
+        <div class="chip-status" id="connChip">
+          <span class="dot"></span>
+          <span id="connText">OFFLINE</span>
+        </div>
+        <div class="chip-status">
+          MODE // <strong id="activeModeBadge" style="margin-left: 4px; color: var(--primary);">STANDARD</strong>
+        </div>
+        <div class="chip-status" id="utcClock">--:--:--</div>
+      </div>
+    </header>
+
+    <!-- Main 3-Column Light Workbench Grid -->
+    <main class="lab-main-grid">
+      <!-- Left Column: Telemetry & Workspace Scene Presets -->
+      <section class="col-stack">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot"></span>01 // 环境与硬件遥测 TELEMETRY</span>
+            <button class="chip-btn" id="refreshBtn" style="padding: 3px 8px;">SYNC</button>
+          </div>
+          <div class="kpi-row">
+            <div class="kpi-box">
+              <div class="kpi-name">RP2040 CORE TEMP</div>
+              <div class="kpi-num"><span id="kpiTemp">--</span><small>°C</small></div>
+              <div class="kpi-gauge"><div id="barTemp"></div></div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-name">AMBIENT LIGHT (GP26)</div>
+              <div class="kpi-num"><span id="kpiLight">--</span><small>%</small></div>
+              <div class="kpi-gauge"><div id="barLight"></div></div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-name">ONBOARD LED</div>
+              <div class="kpi-num" style="font-size: 1.35rem;" id="kpiLed">--</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-name">DESK LAMP PWM</div>
+              <div class="kpi-num"><span id="kpiLamp">--</span><small>%</small></div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <span><i class="chart-swatch temp"></i>板载温度曲线 (°C)</span>
+              <span><i class="chart-swatch light"></i>环境光照曲线 (%)</span>
+            </div>
+            <canvas id="telemetryChart" width="480" height="150"></canvas>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot"></span>02 // 工作站预设模式 SCENE MODES</span>
+          </div>
+          <div class="mode-card-grid" id="modeButtons"></div>
+        </div>
+
+        <!-- Simulator Injection (Shown only when in Simulated mode) -->
+        <div class="panel" id="simPanel" style="display: none;">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot" style="background: var(--accent-amber);"></span>03 // 纯软件仿真注入 SIMULATOR</span>
+            <button class="chip-btn" id="simWaveBtn" style="padding: 2px 8px;">AUTO WAVE</button>
+          </div>
+          <div class="fader-group">
+            <div class="fader-item">
+              <div class="fader-top">
+                <span>虚拟温度注入</span>
+                <strong id="simTempVal">30.0 °C</strong>
+              </div>
+              <input type="range" id="simTempRange" min="15" max="60" step="0.5" value="30" />
+            </div>
+            <div class="fader-item">
+              <div class="fader-top">
+                <span>虚拟环境光注入</span>
+                <strong id="simLightVal">60 %</strong>
+              </div>
+              <input type="range" id="simLightRange" min="0" max="100" step="1" value="60" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Center Column: Physical Instrument Rack (Audio Piano & SFX Pads & Real Switches) -->
+      <section class="col-stack">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot" style="background: var(--accent-teal);"></span>04 // 实体拟物控制台 INSTRUMENT RACK</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">ACTIVE BUZZER & PASSIVE PWM</span>
+          </div>
+
+          <div class="instrument-rack">
+            <!-- Audio Section: Passive Buzzer Pads and Piano Keys -->
+            <div class="rack-section">
+              <div class="rack-title">
+                <span>PASSIVE BUZZER 琴键与 SFX 鼓垫 (GPIO 16)</span>
+                <button class="chip-btn" id="buzzerMuteBtn" style="padding: 2px 7px;">MUTE</button>
+              </div>
+
+              <!-- Quick Drum Pads -->
+              <div class="sfx-pad-grid">
+                <button class="pad-btn" data-sfx="stark_boot">
+                  <span>⚡ 启动音</span>
+                  <small style="font-size: 0.65rem; color: var(--text-muted);">STARK BOOT</small>
+                </button>
+                <button class="pad-btn" data-sfx="beep">
+                  <span>🔔 提示音</span>
+                  <small style="font-size: 0.65rem; color: var(--text-muted);">BEEP</small>
+                </button>
+                <button class="pad-btn" data-sfx="victory">
+                  <span>🏆 胜利音</span>
+                  <small style="font-size: 0.65rem; color: var(--text-muted);">VICTORY</small>
+                </button>
+                <button class="pad-btn" data-sfx="tone_up">
+                  <span>📈 上扬音</span>
+                  <small style="font-size: 0.65rem; color: var(--text-muted);">TONE UP</small>
+                </button>
+              </div>
+
+              <!-- 8-Key Micro Piano -->
+              <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px;">
+                八度微型琴键 (C5 - C6)
+              </div>
+              <div class="piano-keys-wrapper" id="pianoKeyboard">
+                <div class="piano-key" data-freq="523"><span>C5</span><small>Do</small></div>
+                <div class="piano-key" data-freq="587"><span>D5</span><small>Re</small></div>
+                <div class="piano-key" data-freq="659"><span>E5</span><small>Mi</small></div>
+                <div class="piano-key" data-freq="698"><span>F5</span><small>Fa</small></div>
+                <div class="piano-key" data-freq="784"><span>G5</span><small>So</small></div>
+                <div class="piano-key" data-freq="880"><span>A5</span><small>La</small></div>
+                <div class="piano-key" data-freq="988"><span>B5</span><small>Si</small></div>
+                <div class="piano-key" data-freq="1047"><span>C6</span><small>Do*</small></div>
+              </div>
+            </div>
+
+            <!-- Physical Toggle Switches & Alarm Module -->
+            <div class="rack-section">
+              <div class="rack-title">
+                <span>PHYSICAL SWITCHES 实体拨片与警报模块</span>
+              </div>
+              <div class="toggle-shelf">
+                <!-- Board LED Toggle -->
+                <div class="switch-module">
+                  <div class="switch-info">
+                    <div class="sw-name">板载 LED</div>
+                    <div class="sw-sub">RP2040 Board Pin</div>
+                  </div>
+                  <div class="switch-pill" id="swLedToggle"></div>
+                </div>
+
+                <!-- Active Buzzer Alarm Burst -->
+                <div class="switch-module">
+                  <div class="switch-info">
+                    <div class="sw-name">有源警报器 (GP17)</div>
+                    <div class="sw-sub">TMB12A03 + 220Ω</div>
+                  </div>
+                  <button class="pad-btn alarm-pad" id="activeBuzzerBeepBtn" style="padding: 6px 12px; font-size: 0.75rem;">
+                    🚨 鸣响警报
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fader & Desk Lamp PWM / Application Sliders -->
+            <div class="rack-section">
+              <div class="rack-title">
+                <span>PWM 推子与自动化参数控制</span>
+              </div>
+              <div class="fader-group">
+                <div class="fader-item">
+                  <div class="fader-top">
+                    <span>桌面台灯亮度 (actuator.desk_lamp PWM)</span>
+                    <strong id="faderLampVal">0 %</strong>
+                  </div>
+                  <input type="range" id="faderLampRange" min="0" max="100" step="1" value="0" />
+                </div>
+                <div class="fader-item">
+                  <div class="fader-top">
+                    <span>温控报警阈值 (thermal.threshold)</span>
+                    <strong id="faderThermalVal">45.0 °C</strong>
+                  </div>
+                  <input type="range" id="faderThermalRange" min="20" max="65" step="0.5" value="45" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw Detailed Entities Inspection (Compact Details) -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot"></span>05 // 设备与自动化微调 DEVICES & APPS</span>
+          </div>
+          <div id="devicesContainer" class="col-stack" style="gap: 10px;"></div>
+          <div id="appsContainer" class="col-stack" style="gap: 10px; margin-top: 10px;"></div>
+        </div>
+      </section>
+
+      <!-- Right Column: Natural Language Commander & Live Event Stream -->
+      <section class="col-stack">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot" style="background: var(--primary);"></span>06 // 智能助手 COMMANDER</span>
+            <span style="font-size: 0.7rem; color: var(--primary); font-weight: 700;">NL INTENT</span>
+          </div>
+
+          <div class="quick-chip-row">
+            <button class="chip-btn" data-cmd="播放开机音">🎵 播放开机音</button>
+            <button class="chip-btn" data-cmd="汇报当前状态">📊 汇报状态</button>
+            <button class="chip-btn" data-cmd="切换到专注模式">🎯 专注模式</button>
+            <button class="chip-btn" data-cmd="把台灯调到 80%">💡 台灯 80%</button>
+            <button class="chip-btn" data-cmd="开led">🟢 开LED</button>
+            <button class="chip-btn" data-cmd="把温控阈值设为 42 度">🌡️ 阈值 42°C</button>
+          </div>
+
+          <div id="chatLog" class="chat-window"></div>
+
+          <form id="cmdForm" class="chat-input-bar">
+            <input
+              type="text"
+              id="cmdInput"
+              placeholder="对工作站说话，如：把台灯调到 75% / 播放开机音..."
+              autocomplete="off"
+            />
+            <button type="submit" class="btn-primary-action">EXECUTE</button>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span class="title-badge"><span class="badge-dot"></span>07 // 实时事件流 EVENT LOG</span>
+          </div>
+          <div id="eventList" class="event-scroller"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Integrated Bottom Terminal Drawer (Web-based CLI) -->
+  <aside class="lab-terminal-drawer collapsed" id="termDrawer">
+    <div class="terminal-bar" id="termDrawerBar">
+      <div class="term-title">
+        <span>⚡ YUMELAB INTERACTIVE TERMINAL</span>
+        <small style="color: #64748b; font-weight: normal; margin-left: 8px;">(支持直接发送底层协议与设备指令，按 Tab 补全)</small>
+      </div>
+      <button class="term-toggle-btn" id="termToggleBtn">▲ 展开终端 (CLI)</button>
+    </div>
+    <div class="terminal-body">
+      <div class="term-output" id="termOutput">
+        <div class="line sys">YumeLab Terminal Console v1.0.0 Ready. Type 'help' to see commands.</div>
+      </div>
+      <div class="term-input-row">
+        <span class="term-prompt">YumeCore:/ $</span>
+        <input type="text" id="termInput" placeholder="输入命令，例如: ping / info / devices / apps / device write led state TOGGLE..." autocomplete="off" />
+      </div>
+    </div>
+  </aside>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(base_dir, "PICO"))
 
 from events import EventBus
 from applications.thermal import ThermalButton
+from applications.ambient_light import AmbientLightController
 from app_service import AppService
 
 
@@ -100,6 +101,44 @@ class TestApplications(unittest.TestCase):
         self.assertEqual(status, "OK")
         self.assertEqual(payload, "THRESHOLD=48.0C")
         self.assertEqual(self.thermal.read("threshold"), 48.0)
+
+    def test_ambient_light_controller_hysteresis(self):
+        mock_light = MagicMock()
+        mock_light.read.return_value = 60.0
+        mock_lamp = MagicMock()
+        mock_lamp.properties = {"duty": {"readable": True, "writable": True}}
+
+        app = AmbientLightController(
+            sensor=mock_light,
+            events=self.events,
+            dark_threshold=35.0,
+            hysteresis=5.0,
+            debounce_ms=0,
+            actuator_device=mock_lamp,
+            target_brightness=75.0,
+        )
+        self.assertEqual(app.read("state"), "IDLE")
+
+        # Drops to 30% (<= 35%) -> ACTIVE, lamp duty 75%
+        self.events.publish("sensor.light.changed", {"value": 30.0})
+        self.assertEqual(app.read("state"), "ACTIVE")
+        mock_lamp.write.assert_called_with("duty", 75.0)
+
+        # Rises to 38% (<= 35 + 5 = 40%) -> hysteresis keeps it ACTIVE
+        self.events.publish("sensor.light.changed", {"value": 38.0})
+        self.assertEqual(app.read("state"), "ACTIVE")
+
+        # Rises to 45% (> 40%) -> IDLE, lamp duty 0%
+        self.events.publish("sensor.light.changed", {"value": 45.0})
+        self.assertEqual(app.read("state"), "IDLE")
+        mock_lamp.write.assert_called_with("duty", 0.0)
+
+        # Disable turns lamp off immediately
+        self.events.publish("sensor.light.changed", {"value": 20.0})
+        self.assertEqual(app.read("state"), "ACTIVE")
+        app.write("enabled", "false")
+        self.assertEqual(app.read("state"), "IDLE")
+        mock_lamp.write.assert_called_with("duty", 0.0)
 
 
 if __name__ == "__main__":

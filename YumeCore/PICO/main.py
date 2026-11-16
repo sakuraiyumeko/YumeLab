@@ -17,9 +17,11 @@ from protocol import parse_request, make_response
 from hardware import HardwareManager
 from devices import DeviceRegistry
 from sensors import TemperatureSensor, LightSensor
-from actuators import LED
+from actuators import LED, PWMOutput
+from buzzer import PassiveBuzzer, ActiveBuzzer
 from events import EventBus
 from applications.thermal import ThermalButton
+from applications.ambient_light import AmbientLightController
 from device_service import DeviceService
 from app_service import AppService
 from filesystem import FileSystem
@@ -102,7 +104,7 @@ def main():
     app_service = AppService()
     filesystem = FileSystem()
 
-    controller = Controller(registry=registry, events=events, update_interval_ms=1000)
+    controller = Controller(registry=registry, events=events, update_interval_ms=100)
 
     # 2. Register Standard Hardware Devices
     try:
@@ -137,6 +139,27 @@ def main():
         print("[WARN] Failed to register LightSensor:", exc)
         light_sensor = None
 
+    try:
+        desk_lamp = PWMOutput(hardware, pin=15, device_id="actuator.desk_lamp", freq=1000, duty=0)
+        registry.register(desk_lamp)
+    except Exception as exc:
+        print("[WARN] Failed to register DeskLamp:", exc)
+        desk_lamp = None
+
+    try:
+        passive_buzzer = PassiveBuzzer(hardware, pin=16, device_id="actuator.buzzer.passive")
+        registry.register(passive_buzzer)
+    except Exception as exc:
+        print("[WARN] Failed to register PassiveBuzzer:", exc)
+        passive_buzzer = None
+
+    try:
+        active_buzzer = ActiveBuzzer(hardware, pin=17, device_id="actuator.buzzer.active", initial="OFF")
+        registry.register(active_buzzer)
+    except Exception as exc:
+        print("[WARN] Failed to register ActiveBuzzer:", exc)
+        active_buzzer = None
+
     # 3. Register Applications
     if temp_sensor is not None:
         thermal_app = ThermalButton(
@@ -149,6 +172,19 @@ def main():
         )
         app_service.register_app(thermal_app)
         controller.register_app(thermal_app)
+
+    if light_sensor is not None:
+        ambient_light_app = AmbientLightController(
+            sensor=light_sensor,
+            events=events,
+            dark_threshold=35.0,
+            hysteresis=5.0,
+            debounce_ms=200,
+            actuator_device=desk_lamp,
+            target_brightness=60.0,
+        )
+        app_service.register_app(ambient_light_app)
+        controller.register_app(ambient_light_app)
 
     # 4. Build Dispatcher
     dispatcher = CommandDispatcher(device_service, app_service, filesystem)

@@ -67,7 +67,8 @@ PC 端 (Python 3)               Pico 端 (MicroPython)
 ├── boot.py              # 启动日志
 └── applications/        # 应用逻辑目录
     ├── __init__.py
-    └── thermal.py       # 虚拟温感按钮应用
+    ├── thermal.py       # 虚拟温感按钮应用
+    └── ambient_light.py # 环境光自动补光应用
 ```
 
 **推荐上传方式**：
@@ -263,7 +264,8 @@ YumeCore 最大的设计亮点是**插件化与开闭原则**。新增传感器�
 
 ### 5.1 如何新增一个硬件外设/传感器
 
-假设你要接入一个光敏传感器（LDR，连接在 GPIO 26 / ADC0 引脚上）：
+（注：当前系统已内置了一个基于 `AnalogSensor` 扩展出的光敏传感器 `LightSensor`，可在 `PICO/sensors.py` 查看参考实现。）
+下面以自定义新传感器（例如距离/声音传感器，连接在 GPIO 27 / ADC1）为例：
 
 1. **编写设备类**（在 `sensors.py` 或你自建的模块中）：
    ```python

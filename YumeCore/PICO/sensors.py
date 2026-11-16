@@ -169,14 +169,18 @@ class LightSensor(AnalogSensor):
         event_bus=None,
         deadband=1.0
     ):
+        if bright_raw == dark_raw:
+            raise ValueError("INVALID_CALIBRATION: bright_raw and dark_raw cannot be equal")
+
         self.dark_raw = dark_raw
         self.bright_raw = bright_raw
         self.event_bus = event_bus
-        self.deadband = deadband
+        self.deadband = float(deadband)
         self._last_published_brightness = None
 
         super().__init__(hardware, pin, device_id)
 
+        self.properties = dict(self.properties)
         self.properties["brightness"] = {
             "readable": True,
             "writable": False,

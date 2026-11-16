@@ -10,9 +10,9 @@ sys.path.insert(0, os.path.join(base_dir, "PICO"))
 from devices import Device, DeviceRegistry
 from hardware import HardwareManager
 import hardware
-from sensors import TemperatureSensor
+from sensors import TemperatureSensor, LightSensor
 import actuators
-from actuators import LED, DigitalOutput
+from actuators import LED, DigitalOutput, PWMOutput
 from device_service import DeviceService
 
 
@@ -60,6 +60,71 @@ class TestDevices(unittest.TestCase):
             # Property write not allowed
             with self.assertRaises(ValueError):
                 sensor.write("value", 30)
+
+    def test_light_sensor_and_calibration(self):
+        mock_adc = MagicMock()
+        mock_adc.read_u16.return_value = 33287  # ~50%
+
+        with patch.object(hardware, "ADC", return_value=mock_adc), \
+             patch.object(hardware, "Pin", return_value=MagicMock()):
+            bus = MagicMock()
+            sensor = LightSensor(
+                self.hw,
+                pin=26,
+                device_id="sensor.light",
+                dark_raw=1040,
+                bright_raw=65535,
+                event_bus=bus,
+                deadband=2.0,
+            )
+            self.assertEqual(sensor.device_id, "sensor.light")
+            brightness = sensor.read("brightness")
+            self.assertAlmostEqual(brightness, 50.0, delta=0.2)
+            bus.publish.assert_called_once()
+
+            # Small change within deadband (<2.0) should not publish
+            mock_adc.read_u16.return_value = 33600
+            sensor.update()
+            self.assertEqual(bus.publish.call_count, 1)
+
+            # Clamping at extremes (below dark_raw and above bright_raw)
+            mock_adc.read_u16.return_value = 0
+            sensor.update()
+            self.assertEqual(sensor.read("brightness"), 0.0)
+            self.assertEqual(bus.publish.call_count, 2)
+
+            mock_adc.read_u16.return_value = 70000
+            sensor.update()
+            self.assertEqual(sensor.read("brightness"), 100.0)
+            self.assertEqual(bus.publish.call_count, 3)
+
+        # Invalid calibration raises ValueError
+        with self.assertRaises(ValueError):
+            LightSensor(self.hw, pin=27, dark_raw=1000, bright_raw=1000)
+
+    def test_pwm_output_actuator(self):
+        mock_pwm = MagicMock()
+        duty_holder = [0]
+        freq_holder = [1000]
+        def fake_duty(v=None):
+            if v is not None:
+                duty_holder[0] = v
+            return duty_holder[0]
+        def fake_freq(v=None):
+            if v is not None:
+                freq_holder[0] = v
+            return freq_holder[0]
+        mock_pwm.duty_u16.side_effect = fake_duty
+        mock_pwm.freq.side_effect = fake_freq
+
+        with patch.object(hardware, "Pin", return_value=MagicMock()), \
+             patch.object(hardware, "PWM", return_value=mock_pwm):
+            lamp = PWMOutput(self.hw, pin=15, device_id="actuator.desk_lamp", freq=1000, duty=0)
+            self.assertEqual(lamp.read("duty"), 0.0)
+            lamp.write("duty", 50)
+            self.assertAlmostEqual(lamp.read("duty"), 50.0, delta=0.1)
+            with self.assertRaises(ValueError):
+                lamp.write("duty", 120)
 
     def test_led_actuator(self):
         mock_pin = MagicMock()
